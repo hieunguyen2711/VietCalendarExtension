@@ -60,6 +60,14 @@ const STRINGS = {
     calendarDuplicates:
       '⚠ You have more than one calendar named "Lịch Âm". The first is selected. ' +
       'Delete the extras in Google Calendar to avoid confusion.',
+    calendarNotVisible:
+      '⚠ Could not switch this calendar on automatically. In Google Calendar, ' +
+      'tick the box next to it under "My calendars" or your events won\'t show.',
+    calendarMissing:
+      'The calendar you had selected no longer exists, so "Primary" is now selected.',
+    calendarMissingRetry:
+      'The calendar you had selected no longer exists. Switched to "Primary" — ' +
+      'press "Create event" again, or pick another calendar in Settings.',
 
     preview: 'Preview →',
     confirmTitle: 'Confirm event',
@@ -100,6 +108,8 @@ const STRINGS = {
     language: 'Language',
     settingsSaved: 'Saved.',
     defaultReminder: 'Default reminder',
+    color: 'Colour',
+    defaultColor: 'Default colour',
 
     bulkHelp:
       'One event per line: title, day/month[/year]\nExample: Giỗ ông nội, 15/3/2026',
@@ -162,6 +172,14 @@ const STRINGS = {
     calendarDuplicates:
       '⚠ Bạn có nhiều lịch trùng tên "Lịch Âm". Lịch đầu tiên đã được chọn. ' +
       'Hãy xóa các lịch thừa trong Google Calendar để tránh nhầm lẫn.',
+    calendarNotVisible:
+      '⚠ Không thể tự bật lịch này. Trong Google Calendar, hãy tích vào ô bên cạnh ' +
+      'lịch ở mục "Lịch của tôi", nếu không sự kiện sẽ không hiển thị.',
+    calendarMissing:
+      'Lịch bạn đã chọn không còn tồn tại, hệ thống đã chuyển về lịch "Chính".',
+    calendarMissingRetry:
+      'Lịch bạn đã chọn không còn tồn tại. Đã chuyển về lịch "Chính" — ' +
+      'hãy nhấn "Tạo sự kiện" lại, hoặc chọn lịch khác trong Cài đặt.',
 
     preview: 'Xem trước →',
     confirmTitle: 'Xác nhận sự kiện',
@@ -202,6 +220,8 @@ const STRINGS = {
     language: 'Ngôn ngữ',
     settingsSaved: 'Đã lưu.',
     defaultReminder: 'Nhắc nhở mặc định',
+    color: 'Màu sắc',
+    defaultColor: 'Màu mặc định',
 
     bulkHelp:
       'Mỗi dòng một sự kiện: tên, ngày/tháng[/năm]\nVí dụ: Giỗ ông nội, 15/3/2026',

@@ -17,6 +17,7 @@ import { zodiacForLunarYear } from '../core/zodiac.js';
 import { NONE, lunarYearly, lunarMonthly } from '../core/recurrence.js';
 import { buildDraft, localTimeZone, describeReminder } from '../core/draft.js';
 import { HOLIDAYS, holidayName } from '../core/holidays.js';
+import { EVENT_COLORS, colorName } from '../core/colors.js';
 import { parseBulk, partitionRows } from '../core/bulk.js';
 import { t, setLang, getLang, applyTranslations } from '../core/i18n.js';
 import {
@@ -97,6 +98,43 @@ function recurrenceFromForm() {
 function reminderFromForm() {
   const v = $('reminder').value;
   return v === '' ? null : Number(v);
+}
+
+/** Currently selected colour id in a picker, or null for "calendar default". */
+function selectedColor(containerId) {
+  const checked = $(containerId).querySelector('input:checked');
+  return checked && checked.value !== '' ? checked.value : null;
+}
+
+/**
+ * Render a colour picker as radio swatches. The first option is always
+ * "calendar default" (no colorId), matching Google's own behaviour.
+ */
+function renderColorPicker(containerId, groupName, selected, onChange) {
+  const container = $(containerId);
+  container.textContent = '';
+
+  const options = [{ id: '', hex: null }, ...EVENT_COLORS];
+  for (const opt of options) {
+    const label = document.createElement('label');
+    label.className = 'swatch';
+    label.title = colorName(opt.id || null, getLang());
+
+    const input = document.createElement('input');
+    input.type = 'radio';
+    input.name = groupName;
+    input.value = opt.id;
+    input.checked = (selected ?? '') === opt.id;
+
+    const dot = document.createElement('span');
+    dot.className = opt.hex ? 'dot' : 'dot dot-default';
+    if (opt.hex) dot.style.background = opt.hex;
+
+    label.append(input, dot);
+    container.appendChild(label);
+  }
+
+  container.addEventListener('change', () => onChange?.(selectedColor(containerId)));
 }
 
 function calendarLabel() {
@@ -195,6 +233,7 @@ function commonDraftOptions() {
     allDay,
     recurrence: recurrenceFromForm(),
     reminderMinutes: reminderFromForm(),
+    colorId: selectedColor('color-picker'),
     timeZone: localTimeZone(),
     lang: getLang(),
   };
@@ -274,6 +313,7 @@ function renderConfirmation() {
   $('c-zodiac').textContent = many ? '—' : p.zodiacText;
   $('c-recurrence').textContent = p.recurrenceText;
   $('c-reminder').textContent = p.reminderText;
+  renderColorSummary(p);
   $('c-calendar').textContent = calendarLabel();
   $('c-timezone').textContent = p.timezone;
   $('confirm-error').textContent = '';
@@ -284,6 +324,19 @@ function renderConfirmation() {
     'c-batch-wrap',
     many ? pending.map((d) => `${d.preview.title} — ${d.preview.gregorianText}`) : []
   );
+}
+
+/** Colour row on the confirmation: a swatch plus its name. */
+function renderColorSummary(preview) {
+  const cell = $('c-color');
+  cell.textContent = '';
+  if (preview.colorHex) {
+    const dot = document.createElement('span');
+    dot.className = 'dot inline-dot';
+    dot.style.background = preview.colorHex;
+    cell.appendChild(dot);
+  }
+  cell.appendChild(document.createTextNode(preview.colorText));
 }
 
 function fillList(listId, wrapId, items) {
@@ -336,7 +389,16 @@ async function handleCreate() {
       pending.length > 1 ? `${pending.length} ${t('holidaysAdded')}` : t('successBody');
     show('success');
   } catch (err) {
-    errorEl.textContent = err.message || 'Something went wrong. Please try again.';
+    // The chosen calendar was deleted in Google Calendar since we saved it.
+    // Reset the preference and ask the user to confirm again, rather than
+    // silently filing the event somewhere they didn't choose.
+    if (err.calendarMissing && prefs.calendarId !== 'primary') {
+      await resetCalendarToPrimary();
+      renderConfirmation();
+      errorEl.textContent = t('calendarMissingRetry');
+    } else {
+      errorEl.textContent = err.message || 'Something went wrong. Please try again.';
+    }
   } finally {
     submitting = false;
     btn.disabled = false;
@@ -427,6 +489,7 @@ function handleAddHolidays() {
         allDay: true,
         recurrence: lunarYearly(),
         reminderMinutes: prefs.defaultReminderMinutes,
+        colorId: prefs.defaultColorId,
         timeZone: localTimeZone(),
         lang: getLang(),
       })
@@ -522,6 +585,7 @@ function loadIntoForm(entry) {
     : src.recurrence?.freq === 'lunarMonthly' ? 'monthly'
     : 'none';
   $('reminder').value = src.reminderMinutes == null ? '' : String(src.reminderMinutes);
+  renderColorPicker('color-picker', 'event-color', src.colorId ?? prefs.defaultColorId);
   updateModeUI();
   toggleTimeRow();
   show('new');
@@ -531,29 +595,47 @@ function loadIntoForm(entry) {
 
 async function loadCalendars() {
   const select = $('calendar-select');
+  const errorEl = $('settings-error');
   select.textContent = '';
   const loading = document.createElement('option');
   loading.textContent = t('calendarLoading');
   select.appendChild(loading);
+
   try {
     const calendars = await listCalendars();
     select.textContent = '';
     for (const c of calendars) {
       const opt = document.createElement('option');
-      opt.value = c.id;
+      // Store the primary calendar under Google's stable "primary" alias
+      // rather than its raw id (which is the account's email address).
+      opt.value = c.primary ? 'primary' : c.id;
       opt.textContent = c.primary ? `${c.summary} (primary)` : c.summary;
       select.appendChild(opt);
     }
+
+    // The saved calendar may have been deleted in Google Calendar behind our
+    // back. Detect that here and fall back, instead of writing events into a
+    // calendar that no longer exists.
+    const available = new Set([...select.options].map((o) => o.value));
+    if (!available.has(prefs.calendarId)) {
+      await resetCalendarToPrimary();
+      errorEl.textContent = t('calendarMissing');
+    }
     select.value = prefs.calendarId;
-    if (select.value !== prefs.calendarId) select.value = 'primary';
   } catch (err) {
     select.textContent = '';
     const opt = document.createElement('option');
     opt.value = 'primary';
     opt.textContent = 'Primary';
     select.appendChild(opt);
-    $('settings-error').textContent = err.message;
+    errorEl.textContent = err.message;
   }
+}
+
+/** Point the extension back at the primary calendar and persist that. */
+async function resetCalendarToPrimary() {
+  prefs = { ...prefs, calendarId: 'primary', calendarName: '' };
+  await setPrefs({ calendarId: 'primary', calendarName: '' });
 }
 
 async function handleCreateCalendar() {
@@ -571,9 +653,12 @@ async function handleCreateCalendar() {
     await loadCalendars();
     $('calendar-select').value = cal.id;
     statusEl.textContent = cal.created ? t('calendarCreated') : t('calendarExisting');
-    if (cal.duplicates > 1) {
-      errorEl.textContent = `${t('calendarDuplicates')} (${cal.duplicates})`;
-    }
+    const notes = [];
+    // If we couldn't switch the calendar on, events would be invisible in the
+    // Google Calendar grid — tell the user how to fix it themselves.
+    if (!cal.visible) notes.push(t('calendarNotVisible'));
+    if (cal.duplicates > 1) notes.push(`${t('calendarDuplicates')} (${cal.duplicates})`);
+    errorEl.textContent = notes.join('\n');
   } catch (err) {
     errorEl.textContent = err.message;
   } finally {
@@ -602,6 +687,7 @@ function applyDefaultsToForm() {
   $('all-day').checked = prefs.allDayDefault;
   $('reminder').value =
     prefs.defaultReminderMinutes == null ? '' : String(prefs.defaultReminderMinutes);
+  renderColorPicker('color-picker', 'event-color', prefs.defaultColorId);
 }
 
 // ---------------------------------------------------------------- wiring
@@ -676,6 +762,12 @@ for (const id of ['lang-select', 'lang-quick']) {
   $('default-reminder').value =
     prefs.defaultReminderMinutes == null ? '' : String(prefs.defaultReminderMinutes);
   applyDefaultsToForm();
+  renderColorPicker('default-color-picker', 'default-color', prefs.defaultColorId, async (id) => {
+    prefs = { ...prefs, defaultColorId: id };
+    await setPrefs({ defaultColorId: id });
+    renderColorPicker('color-picker', 'event-color', id);
+    $('settings-status').textContent = t('settingsSaved');
+  });
   renderToday();
   updateModeUI();
   toggleTimeRow();

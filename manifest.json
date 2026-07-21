@@ -25,7 +25,7 @@
     "client_id": "1062072614362-d2fnj23ljg6ui4rb96ru3o7du8b1p2dg.apps.googleusercontent.com",
     "scopes": [
       "https://www.googleapis.com/auth/calendar.events",
-      "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
+      "https://www.googleapis.com/auth/calendar.calendarlist",
       "https://www.googleapis.com/auth/calendar.app.created"
     ]
   }

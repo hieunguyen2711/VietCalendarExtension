@@ -116,6 +116,25 @@ button, .button {
 .upcoming ul { margin: 4px 0 0; padding-left: 18px; color: var(--fg); font-size: 13px; }
 .upcoming li { margin: 2px 0; }
 
+.color-picker { display: flex; flex-wrap: wrap; gap: 6px; }
+.swatch { display: inline-flex; cursor: pointer; }
+.swatch input { position: absolute; opacity: 0; width: 0; height: 0; }
+.dot {
+  display: inline-block; width: 22px; height: 22px; border-radius: 50%;
+  border: 2px solid transparent; box-shadow: 0 0 0 1px var(--border) inset;
+}
+/* "Calendar default" swatch: hollow, so it reads as "no colour chosen". */
+.dot-default {
+  background:
+    linear-gradient(45deg, transparent 44%, var(--muted) 44%, var(--muted) 56%, transparent 56%);
+}
+.swatch input:checked + .dot {
+  border-color: var(--fg);
+  box-shadow: 0 0 0 1px var(--bg) inset;
+}
+.swatch input:focus-visible + .dot { outline: 2px solid var(--primary); outline-offset: 2px; }
+.inline-dot { width: 12px; height: 12px; vertical-align: -1px; margin-right: 6px; box-shadow: none; }
+
 .holiday-list, .history-list { list-style: none; margin: 10px 0; padding: 0; }
 .holiday-list li { padding: 3px 0; border-bottom: 1px solid var(--border); }
 .holiday-list .checkbox { margin-top: 4px; }

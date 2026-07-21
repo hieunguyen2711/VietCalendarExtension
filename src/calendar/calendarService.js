@@ -76,11 +76,13 @@ export function matchLunarCalendars(calendars, name = LUNAR_CALENDAR_NAME) {
 export async function findOrCreateLunarCalendar(name = LUNAR_CALENDAR_NAME) {
   const existing = matchLunarCalendars(await listCalendars(), name);
   if (existing.length) {
+    const visible = await setCalendarVisible(existing[0].id);
     return {
       id: existing[0].id,
       summary: existing[0].summary,
       created: false,
       duplicates: existing.length,
+      visible,
     };
   }
 
@@ -90,7 +92,32 @@ export async function findOrCreateLunarCalendar(name = LUNAR_CALENDAR_NAME) {
   });
   if (!res.ok) throw new Error(await errorMessage(res));
   const data = await res.json();
-  return { id: data.id, summary: data.summary, created: true, duplicates: 1 };
+  const visible = await setCalendarVisible(data.id);
+  return { id: data.id, summary: data.summary, created: true, duplicates: 1, visible };
+}
+
+/**
+ * Make a calendar's contents actually render in the Google Calendar UI.
+ *
+ * This is NOT cosmetic. A calendarList entry's `selected` flag defaults to
+ * false for calendars added via the API, so events written to a freshly created
+ * calendar exist and are reachable by direct link, yet never appear on the
+ * grid. To the user that reads as "my event vanished".
+ *
+ * Returns true if the calendar is now visible, false if we couldn't set it
+ * (e.g. the calendarList write scope wasn't granted). Deliberately does not
+ * throw: failing to tick a checkbox must not fail calendar selection.
+ */
+export async function setCalendarVisible(calendarId) {
+  try {
+    const res = await apiFetch(`/users/me/calendarList/${encodeURIComponent(calendarId)}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ selected: true }),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -113,7 +140,12 @@ export async function insertEvent(googleEvent, calendarId = 'primary', requestId
   }
 
   if (!res.ok) {
-    throw new Error(`Google Calendar error (${res.status}): ${await errorMessage(res)}`);
+    const err = new Error(`Google Calendar error (${res.status}): ${await errorMessage(res)}`);
+    // Callers need to distinguish "the target calendar is gone" from other
+    // failures, so they can recover instead of just showing a raw message.
+    err.status = res.status;
+    err.calendarMissing = res.status === 404 || res.status === 403;
+    throw err;
   }
 
   const data = await res.json();

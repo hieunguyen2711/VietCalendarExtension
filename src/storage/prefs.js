@@ -15,6 +15,7 @@ const PREF_DEFAULTS = {
   calendarId: 'primary',
   calendarName: '',
   defaultReminderMinutes: null,
+  defaultColorId: null,
   allDayDefault: true,
 };
 

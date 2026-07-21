@@ -115,6 +115,11 @@
             </select>
           </label>
 
+          <div class="field">
+            <span data-i18n="color">Colour</span>
+            <div id="color-picker" class="color-picker" role="radiogroup" aria-label="Event colour"></div>
+          </div>
+
           <p id="form-error" class="error" role="alert" aria-live="assertive"></p>
           <button id="preview-btn" type="submit" class="primary" data-i18n="preview">Preview →</button>
         </form>
@@ -130,6 +135,7 @@
           <dt data-i18n="fieldZodiac">Zodiac year</dt><dd id="c-zodiac"></dd>
           <dt data-i18n="fieldRepeats">Repeats</dt><dd id="c-recurrence"></dd>
           <dt data-i18n="fieldReminder">Reminder</dt><dd id="c-reminder"></dd>
+          <dt data-i18n="color">Colour</dt><dd id="c-color"></dd>
           <dt data-i18n="fieldCalendar">Calendar</dt><dd id="c-calendar"></dd>
           <dt data-i18n="fieldTimezone">Timezone</dt><dd id="c-timezone"></dd>
         </dl>
@@ -212,6 +218,11 @@
             <option value="10080" data-i18n="reminder7">1 week before</option>
           </select>
         </label>
+
+        <div class="field">
+          <span data-i18n="defaultColor">Default colour</span>
+          <div id="default-color-picker" class="color-picker" role="radiogroup" aria-label="Default colour"></div>
+        </div>
 
         <p id="settings-status" class="hint" aria-live="polite"></p>
         <p id="settings-error" class="error" role="alert"></p>

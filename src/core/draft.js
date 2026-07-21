@@ -11,6 +11,7 @@ import { jdFromDate, jdToDate } from './lunar.js';
 import { describe as describeRecurrence } from './recurrence.js';
 import { lunarAnniversaryDates, lunarMonthlyDates } from './occurrences.js';
 import { zodiacForLunarYear, describeZodiac } from './zodiac.js';
+import { colorName, isValidColorId, EVENT_COLORS } from './colors.js';
 
 /**
  * IANA timezone for Vietnam.
@@ -72,6 +73,8 @@ function humanDate({ day, month, year }) {
  *           the lunar date.
  * @property {number|null} [reminderMinutes] popup reminder N minutes before,
  *           or null to use the calendar's default reminders.
+ * @property {string|null} [colorId] Google event colorId "1".."11", or null to
+ *           inherit the calendar's colour.
  * @property {string} [lang] 'en' | 'vi', for preview text only.
  */
 
@@ -97,6 +100,7 @@ export function buildDraft(input) {
     recurrence,
     timeZone = localTimeZone(),
     reminderMinutes = null,
+    colorId = null,
     lang = 'en',
   } = input;
 
@@ -125,6 +129,10 @@ export function buildDraft(input) {
     summary: title,
     description,
   };
+
+  // Omit colorId entirely when unset — that's how Google means "inherit the
+  // calendar's colour". Sending an invalid id would fail the whole insert.
+  if (isValidColorId(colorId)) googleEvent.colorId = String(colorId);
 
   let whenText;
   if (allDay) {
@@ -192,6 +200,8 @@ export function buildDraft(input) {
       upcoming: occurrences.slice(0, 5).map(humanDate),
       isRecurring: occurrences.length > 1,
       reminderText: describeReminder(reminderMinutes, lang),
+      colorText: colorName(colorId, lang),
+      colorHex: getColorHex(colorId),
       // All-day events are floating dates in Google Calendar — no zone applies.
       timezone: allDay
         ? (lang === 'vi' ? 'Cả ngày (không có múi giờ)' : 'All-day (no timezone)')
@@ -200,8 +210,14 @@ export function buildDraft(input) {
     // The exact payload sent to Google Calendar:
     googleEvent,
     // Kept so the extension can rebuild/extend this event later.
-    source: { lunar, recurrence, allDay, start, timeZone, reminderMinutes },
+    source: { lunar, recurrence, allDay, start, timeZone, reminderMinutes, colorId },
   };
+}
+
+/** Swatch colour for the preview, or null when inheriting the calendar's. */
+function getColorHex(colorId) {
+  const c = EVENT_COLORS.find((x) => x.id === String(colorId));
+  return c ? c.hex : null;
 }
 
 /** Human-readable reminder summary. */
