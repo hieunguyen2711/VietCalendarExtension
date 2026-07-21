@@ -1,206 +1,350 @@
 /*
- * Popup controller. Wires the form to validation -> conversion -> preview ->
- * confirmed submission. No calendar write happens until the user clicks
- * "Create event" on the confirmation screen.
+ * Popup controller.
+ *
+ * Flow for every creation path: validate -> convert -> preview -> explicit
+ * confirmation -> write. Nothing reaches Google Calendar before the user
+ * presses "Create" on the confirmation screen.
  */
 
-import { validateLunarDate, validateTitle, validateTime } from '../core/validate.js';
-import { getLeapMonthOfYear } from '../core/lunar.js';
+import {
+  validateLunarDate,
+  validateSolarDate,
+  validateTitle,
+  validateTime,
+} from '../core/validate.js';
+import { convertSolar2Lunar, getLeapMonthOfYear } from '../core/lunar.js';
 import { zodiacForLunarYear } from '../core/zodiac.js';
-import { NONE, lunarYearly } from '../core/recurrence.js';
-import { buildDraft, localTimeZone } from '../core/draft.js';
-import { insertEvent } from '../calendar/calendarService.js';
+import { NONE, lunarYearly, lunarMonthly } from '../core/recurrence.js';
+import { buildDraft, localTimeZone, describeReminder } from '../core/draft.js';
+import { HOLIDAYS, holidayName } from '../core/holidays.js';
+import { parseBulk, partitionRows } from '../core/bulk.js';
+import { t, setLang, getLang, applyTranslations } from '../core/i18n.js';
+import {
+  insertEvent,
+  deleteEvent,
+  listCalendars,
+  findOrCreateLunarCalendar,
+} from '../calendar/calendarService.js';
+import {
+  getPrefs,
+  setPrefs,
+  getHistory,
+  addHistory,
+  removeHistory,
+  clearHistory,
+} from '../storage/prefs.js';
 
 const $ = (id) => document.getElementById(id);
 
-const views = {
-  form: $('form-view'),
-  confirm: $('confirm-view'),
-  success: $('success-view'),
-};
-
-function show(view) {
-  for (const v of Object.values(views)) v.classList.add('hidden');
-  views[view].classList.remove('hidden');
-}
-
-/** The draft currently awaiting confirmation. */
-let pendingDraft = null;
-/** Guards against double-submits. */
+let prefs = null;
+/** Drafts awaiting confirmation (one for a single event, many for bulk). */
+let pending = [];
 let submitting = false;
 
-// --- Live conversion hint + all-day toggle ---------------------------------
+// ---------------------------------------------------------------- views
 
-function readLunarInput() {
+const VIEWS = ['new', 'confirm', 'success', 'holidays', 'history', 'settings'];
+
+function show(view) {
+  for (const v of VIEWS) $(`${v}-view`).classList.toggle('hidden', v !== view);
+  for (const tab of document.querySelectorAll('.tab')) {
+    tab.classList.toggle('active', tab.dataset.view === view);
+  }
+}
+
+// ---------------------------------------------------------------- helpers
+
+function todayParts() {
+  const now = new Date();
+  return { day: now.getDate(), month: now.getMonth() + 1, year: now.getFullYear() };
+}
+
+function renderToday() {
+  const { day, month, year } = todayParts();
+  const [ld, lm, ly, leap] = convertSolar2Lunar(day, month, year);
+  const z = zodiacForLunarYear(ly);
+  const animal = getLang() === 'vi' ? z.animal.vi : z.animal.en;
+  $('today-line').textContent =
+    `${t('todayIs')}: ${ld}/${lm}${leap ? ' (nhuận)' : ''} ${t('lunarLabel')} · ${z.name} (${animal})`;
+}
+
+function currentMode() {
+  return $('mode').value;
+}
+
+function readDateInputs() {
   return {
-    day: parseInt($('lunar-day').value, 10),
-    month: parseInt($('lunar-month').value, 10),
-    year: parseInt($('lunar-year').value, 10),
+    day: parseInt($('in-day').value, 10),
+    month: parseInt($('in-month').value, 10),
+    year: parseInt($('in-year').value, 10),
     isLeapMonth: $('leap-month').checked,
   };
 }
 
+/** Resolve the current date inputs into { gregorian, lunar } for either mode. */
+function resolveDate() {
+  const input = readDateInputs();
+  return currentMode() === 'solar' ? validateSolarDate(input) : validateLunarDate(input);
+}
+
+function recurrenceFromForm() {
+  const v = $('repeat').value;
+  if (v === 'yearly') return lunarYearly();
+  if (v === 'monthly') return lunarMonthly();
+  return NONE;
+}
+
+function reminderFromForm() {
+  const v = $('reminder').value;
+  return v === '' ? null : Number(v);
+}
+
+function calendarLabel() {
+  return prefs.calendarName || (prefs.calendarId === 'primary' ? 'Primary' : prefs.calendarId);
+}
+
+// ---------------------------------------------------------------- form UI
+
+function updateModeUI() {
+  const mode = currentMode();
+  const bulk = mode === 'bulk';
+  $('single-fields').classList.toggle('hidden', bulk);
+  $('bulk-fields').classList.toggle('hidden', !bulk);
+  $('date-legend').textContent = mode === 'solar' ? t('modeSolar') : t('modeLunar');
+  // The leap-month question only exists in the lunar calendar.
+  if (mode !== 'lunar') $('leap-row').classList.add('hidden');
+  updateHint();
+}
+
 /**
- * Show the leap-month option only when the month the user typed is actually a
- * doubled (nhuận) month that year — otherwise it's meaningless and hidden.
+ * The leap-month checkbox only appears when the month actually IS doubled that
+ * year — otherwise it's a meaningless question for a normal user.
  */
 function updateLeapVisibility() {
-  const { month, year } = readLunarInput();
+  if (currentMode() !== 'lunar') return;
+  const { month, year } = readDateInputs();
   const row = $('leap-row');
   const relevant =
-    Number.isInteger(month) && Number.isInteger(year) &&
-    getLeapMonthOfYear(year) === month;
+    Number.isInteger(month) && Number.isInteger(year) && getLeapMonthOfYear(year) === month;
 
   if (!relevant) {
     row.classList.add('hidden');
-    $('leap-month').checked = false; // reset so validation uses leap=0
+    $('leap-month').checked = false;
     return;
   }
   row.classList.remove('hidden');
-  $('leap-label').textContent = `My date is in the leap month ${month} (nhuận tháng ${month})`;
+  $('leap-label').textContent =
+    getLang() === 'vi'
+      ? `Ngày của tôi thuộc tháng ${month} nhuận`
+      : `My date is in the leap month ${month} (nhuận tháng ${month})`;
   $('leap-explain').textContent =
-    `Lunar year ${year} has two ${ordinal(month)} months. ` +
-    `Leave this unticked for the first (normal) one; tick it only for the second (leap) one.`;
-}
-
-function ordinal(n) {
-  const s = ['th', 'st', 'nd', 'rd'];
-  const v = n % 100;
-  return n + (s[(v - 20) % 10] || s[v] || s[0]);
+    getLang() === 'vi'
+      ? `Năm âm lịch ${year} có hai tháng ${month}. Chỉ chọn nếu ngày của bạn thuộc tháng nhuận (tháng thứ hai).`
+      : `Lunar year ${year} has two month-${month}s. Leave unticked for the first (normal) one; tick only for the second (leap) one.`;
 }
 
 function updateHint() {
+  if (currentMode() === 'bulk') return updateBulkStatus();
   updateLeapVisibility();
-  const input = readLunarInput();
+
   const hint = $('converted-hint');
+  const input = readDateInputs();
   if ([input.day, input.month, input.year].some((n) => Number.isNaN(n))) {
     hint.textContent = '';
     return;
   }
-  const result = validateLunarDate(input);
+  const result = resolveDate();
   if (!result.ok) {
     hint.textContent = '⚠ ' + result.errors[0];
     return;
   }
-  const g = result.value.gregorian;
-  const z = zodiacForLunarYear(input.year);
-  hint.textContent =
-    `→ Gregorian: ${g.day}/${g.month}/${g.year}\n` +
-    `Năm ${z.name} — ${z.animal.vi} (${z.animal.en})`;
+  const { gregorian: g, lunar: l } = result.value;
+  const z = zodiacForLunarYear(l.year);
+  const animal = getLang() === 'vi' ? z.animal.vi : z.animal.en;
+  const arrow =
+    currentMode() === 'solar'
+      ? `→ ${t('modeLunar')}: ${l.day}/${l.month}/${l.year}${l.isLeapMonth ? ' (nhuận)' : ''}`
+      : `→ ${t('modeSolar')}: ${g.day}/${g.month}/${g.year}`;
+  hint.textContent = `${arrow}\n${z.name} — ${animal}`;
 }
 
 function toggleTimeRow() {
   const allDay = $('all-day').checked;
   $('time-row').classList.toggle('hidden', allDay);
-  // All-day events float (no zone); timed ones use the user's own zone.
   const tzHint = $('tz-hint');
   tzHint.classList.toggle('hidden', allDay);
-  if (!allDay) {
-    tzHint.textContent = `Time is in your timezone: ${localTimeZone()}`;
-  }
+  if (!allDay) tzHint.textContent = `${t('tzNote')} ${localTimeZone()}`;
 }
 
-// --- Step 1 -> 2: build draft ----------------------------------------------
+function updateBulkStatus() {
+  const year = parseInt($('bulk-year').value, 10);
+  const rows = parseBulk($('bulk-text').value, year);
+  const { valid, invalid } = partitionRows(rows);
+  const parts = [`${valid.length} ${t('bulkParsed')}`];
+  for (const bad of invalid.slice(0, 3)) {
+    parts.push(`⚠ ${t('errBulkLine')} ${bad.lineNumber}: ${bad.error}`);
+  }
+  $('bulk-status').textContent = parts.join('\n');
+}
+
+// ---------------------------------------------------------------- preview
+
+function commonDraftOptions() {
+  const allDay = $('all-day').checked;
+  const opts = {
+    allDay,
+    recurrence: recurrenceFromForm(),
+    reminderMinutes: reminderFromForm(),
+    timeZone: localTimeZone(),
+    lang: getLang(),
+  };
+  if (!allDay) {
+    const timeRes = validateTime($('start-time').value);
+    if (!timeRes.ok) return { errors: timeRes.errors };
+    opts.start = timeRes.value;
+  }
+  return { opts };
+}
 
 function handlePreview(e) {
   e.preventDefault();
   const errorEl = $('form-error');
   errorEl.textContent = '';
-
   const errors = [];
 
-  const titleRes = validateTitle($('title').value);
-  if (!titleRes.ok) errors.push(...titleRes.errors);
+  const { opts, errors: optErrors } = commonDraftOptions();
+  if (optErrors) errors.push(...optErrors);
 
-  const dateRes = validateLunarDate(readLunarInput());
-  if (!dateRes.ok) errors.push(...dateRes.errors);
+  pending = [];
 
-  const allDay = $('all-day').checked;
-  let start;
-  if (!allDay) {
-    const timeRes = validateTime($('start-time').value);
-    if (!timeRes.ok) errors.push(...timeRes.errors);
-    else start = timeRes.value;
+  if (currentMode() === 'bulk') {
+    const year = parseInt($('bulk-year').value, 10);
+    const rows = parseBulk($('bulk-text').value, year);
+    const { valid, invalid } = partitionRows(rows);
+    for (const bad of invalid) {
+      errors.push(`${t('errBulkLine')} ${bad.lineNumber}: ${bad.error}`);
+    }
+    if (!valid.length) errors.push(t('errNoneSelected'));
+    if (errors.length) return void (errorEl.textContent = errors.join('\n'));
+
+    for (const row of valid) {
+      const dateRes = validateLunarDate(row.lunar);
+      if (!dateRes.ok) {
+        errors.push(`${row.title}: ${dateRes.errors[0]}`);
+        continue;
+      }
+      pending.push(
+        buildDraft({
+          title: row.title,
+          gregorian: dateRes.value.gregorian,
+          lunar: dateRes.value.lunar,
+          ...opts,
+        })
+      );
+    }
+    if (errors.length) return void (errorEl.textContent = errors.join('\n'));
+  } else {
+    const titleRes = validateTitle($('title').value);
+    if (!titleRes.ok) errors.push(t('errRequired'));
+    const dateRes = resolveDate();
+    if (!dateRes.ok) errors.push(...dateRes.errors);
+    if (errors.length) return void (errorEl.textContent = errors.join('\n'));
+
+    pending.push(
+      buildDraft({
+        title: titleRes.value,
+        gregorian: dateRes.value.gregorian,
+        lunar: dateRes.value.lunar,
+        ...opts,
+      })
+    );
   }
 
-  if (errors.length) {
-    errorEl.textContent = errors.join('\n');
-    return;
-  }
-
-  const recurrence = $('annual').checked ? lunarYearly() : NONE;
-
-  pendingDraft = buildDraft({
-    title: titleRes.value,
-    gregorian: dateRes.value.gregorian,
-    lunar: dateRes.value.lunar,
-    allDay,
-    start,
-    recurrence,
-  });
-
-  renderConfirmation(pendingDraft.preview);
+  renderConfirmation();
   show('confirm');
 }
 
-function renderConfirmation(p) {
-  $('c-title').textContent = p.title;
-  $('c-lunar').textContent = p.lunarText;
-  $('c-gregorian').textContent = p.gregorianText;
-  $('c-zodiac').textContent = p.zodiacText;
+function renderConfirmation() {
+  const many = pending.length > 1;
+  const p = pending[0].preview;
+
+  $('c-title').textContent = many ? `${pending.length} events` : p.title;
+  $('c-lunar').textContent = many ? '—' : p.lunarText;
+  $('c-gregorian').textContent = many ? '—' : p.gregorianText;
+  $('c-zodiac').textContent = many ? '—' : p.zodiacText;
   $('c-recurrence').textContent = p.recurrenceText;
+  $('c-reminder').textContent = p.reminderText;
+  $('c-calendar').textContent = calendarLabel();
   $('c-timezone').textContent = p.timezone;
   $('confirm-error').textContent = '';
 
-  const wrap = $('c-upcoming-wrap');
-  const list = $('c-upcoming');
-  list.textContent = '';
-  if (p.isRecurring) {
-    for (const d of p.upcoming) {
-      const li = document.createElement('li');
-      li.textContent = d;
-      list.appendChild(li);
-    }
-    wrap.classList.remove('hidden');
-  } else {
-    wrap.classList.add('hidden');
-  }
+  fillList('c-upcoming', 'c-upcoming-wrap', !many && p.isRecurring ? p.upcoming : []);
+  fillList(
+    'c-batch',
+    'c-batch-wrap',
+    many ? pending.map((d) => `${d.preview.title} — ${d.preview.gregorianText}`) : []
+  );
 }
 
-// --- Step 2 -> 3: create -----------------------------------------------------
+function fillList(listId, wrapId, items) {
+  const list = $(listId);
+  list.textContent = '';
+  for (const item of items) {
+    const li = document.createElement('li');
+    li.textContent = item;
+    list.appendChild(li);
+  }
+  $(wrapId).classList.toggle('hidden', items.length === 0);
+}
+
+// ---------------------------------------------------------------- create
 
 async function handleCreate() {
-  if (submitting || !pendingDraft) return;
+  if (submitting || !pending.length) return;
   submitting = true;
   const btn = $('create-btn');
   const errorEl = $('confirm-error');
   errorEl.textContent = '';
   btn.disabled = true;
-  btn.textContent = 'Creating…';
+  btn.textContent = t('creating');
 
   try {
-    // Stable request id for this draft => a double-click can't duplicate it.
-    const requestId = pendingDraft.requestId ||
-      (pendingDraft.requestId = makeRequestId(pendingDraft.googleEvent));
-    const result = await insertEvent(pendingDraft.googleEvent, requestId);
+    let last = null;
+    for (const draft of pending) {
+      const requestId = draft.requestId || (draft.requestId = makeRequestId(draft.googleEvent));
+      const result = await insertEvent(draft.googleEvent, prefs.calendarId, requestId);
+      last = result;
+      await addHistory({
+        eventId: result.id,
+        calendarId: prefs.calendarId,
+        title: draft.preview.title,
+        htmlLink: result.htmlLink || '',
+        createdAt: new Date().toISOString(),
+        source: draft.source,
+        gregorianText: draft.preview.gregorianText,
+      });
+    }
+
     const link = $('open-link');
-    if (result.htmlLink) {
-      link.href = result.htmlLink;
+    if (last?.htmlLink) {
+      link.href = last.htmlLink;
       link.classList.remove('hidden');
     } else {
       link.classList.add('hidden');
     }
+    $('success-body').textContent =
+      pending.length > 1 ? `${pending.length} ${t('holidaysAdded')}` : t('successBody');
     show('success');
   } catch (err) {
     errorEl.textContent = err.message || 'Something went wrong. Please try again.';
   } finally {
     submitting = false;
     btn.disabled = false;
-    btn.textContent = 'Create event';
+    btn.textContent = t('create');
   }
 }
 
-/** Deterministic id from the event content (idempotency key). */
+/** Deterministic id from event content, so a double-click can't duplicate it. */
 function makeRequestId(googleEvent) {
   const seed = JSON.stringify([
     googleEvent.summary,
@@ -209,29 +353,332 @@ function makeRequestId(googleEvent) {
     googleEvent.recurrence || null,
   ]);
   let h = 0;
-  for (let i = 0; i < seed.length; i++) {
-    h = (Math.imul(31, h) + seed.charCodeAt(i)) | 0;
-  }
+  for (let i = 0; i < seed.length; i++) h = (Math.imul(31, h) + seed.charCodeAt(i)) | 0;
   return 'e' + (h >>> 0).toString(32);
 }
 
 function resetForm() {
-  pendingDraft = null;
+  pending = [];
   $('event-form').reset();
   $('converted-hint').textContent = '';
+  $('bulk-status').textContent = '';
+  applyDefaultsToForm();
+  updateModeUI();
   toggleTimeRow();
-  show('form');
+  show('new');
 }
 
-// --- Wire up ----------------------------------------------------------------
+// ---------------------------------------------------------------- holidays
+
+function renderHolidays() {
+  const list = $('holiday-list');
+  list.textContent = '';
+  const year = parseInt($('holiday-year').value, 10);
+  for (const h of HOLIDAYS) {
+    const li = document.createElement('li');
+    const label = document.createElement('label');
+    label.className = 'checkbox';
+
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.value = h.id;
+
+    const span = document.createElement('span');
+    let text = `${holidayName(h, getLang())} — ${h.day}/${h.month} ${t('lunarLabel')}`;
+    if (Number.isInteger(year)) {
+      const res = validateLunarDate({ day: h.day, month: h.month, year, isLeapMonth: false });
+      if (res.ok) {
+        const g = res.value.gregorian;
+        text += ` → ${g.day}/${g.month}/${g.year}`;
+      }
+    }
+    span.textContent = text;
+
+    label.append(cb, span);
+    li.appendChild(label);
+    list.appendChild(li);
+  }
+}
+
+function handleAddHolidays() {
+  const errorEl = $('holiday-error');
+  errorEl.textContent = '';
+  const year = parseInt($('holiday-year').value, 10);
+  if (!Number.isInteger(year)) {
+    errorEl.textContent = t('errNoneSelected');
+    return;
+  }
+  const chosen = [...$('holiday-list').querySelectorAll('input:checked')].map((c) => c.value);
+  if (!chosen.length) {
+    errorEl.textContent = t('errNoneSelected');
+    return;
+  }
+
+  pending = [];
+  for (const id of chosen) {
+    const h = HOLIDAYS.find((x) => x.id === id);
+    const res = validateLunarDate({ day: h.day, month: h.month, year, isLeapMonth: false });
+    if (!res.ok) continue;
+    pending.push(
+      buildDraft({
+        title: holidayName(h, getLang()),
+        gregorian: res.value.gregorian,
+        lunar: res.value.lunar,
+        allDay: true,
+        recurrence: lunarYearly(),
+        reminderMinutes: prefs.defaultReminderMinutes,
+        timeZone: localTimeZone(),
+        lang: getLang(),
+      })
+    );
+  }
+  if (!pending.length) {
+    errorEl.textContent = t('errNoneSelected');
+    return;
+  }
+  renderConfirmation();
+  show('confirm');
+}
+
+// ---------------------------------------------------------------- history
+
+async function renderHistory() {
+  const list = $('history-list');
+  list.textContent = '';
+  const history = await getHistory();
+  if (!history.length) {
+    const li = document.createElement('li');
+    li.className = 'hint';
+    li.textContent = t('historyEmpty');
+    list.appendChild(li);
+    return;
+  }
+  for (const entry of history) {
+    const li = document.createElement('li');
+    li.className = 'history-item';
+
+    const info = document.createElement('div');
+    const title = document.createElement('strong');
+    title.textContent = entry.title;
+    const meta = document.createElement('div');
+    meta.className = 'hint';
+    meta.textContent = entry.gregorianText || '';
+    info.append(title, meta);
+
+    const actions = document.createElement('div');
+    actions.className = 'history-actions';
+
+    const editBtn = document.createElement('button');
+    editBtn.type = 'button';
+    editBtn.className = 'secondary small';
+    editBtn.textContent = t('edit');
+    editBtn.addEventListener('click', () => loadIntoForm(entry));
+
+    const delBtn = document.createElement('button');
+    delBtn.type = 'button';
+    delBtn.className = 'secondary small danger';
+    delBtn.textContent = t('delete');
+    delBtn.addEventListener('click', () => handleDelete(entry, delBtn));
+
+    actions.append(editBtn, delBtn);
+    li.append(info, actions);
+    list.appendChild(li);
+  }
+}
+
+async function handleDelete(entry, btn) {
+  const errorEl = $('history-error');
+  errorEl.textContent = '';
+  btn.disabled = true;
+  btn.textContent = t('deleting');
+  try {
+    await deleteEvent(entry.calendarId, entry.eventId);
+    await removeHistory(entry.eventId);
+    await renderHistory();
+  } catch (err) {
+    errorEl.textContent = err.message;
+    btn.disabled = false;
+    btn.textContent = t('delete');
+  }
+}
+
+/** Load a previously created event's source back into the form for editing. */
+function loadIntoForm(entry) {
+  const src = entry.source;
+  if (!src?.lunar) return;
+  $('mode').value = 'lunar';
+  $('title').value = entry.title;
+  $('in-day').value = src.lunar.day;
+  $('in-month').value = src.lunar.month;
+  $('in-year').value = src.lunar.year;
+  $('leap-month').checked = !!src.lunar.isLeapMonth;
+  $('all-day').checked = !!src.allDay;
+  if (src.start) {
+    $('start-time').value =
+      `${String(src.start.hour).padStart(2, '0')}:${String(src.start.minute).padStart(2, '0')}`;
+  }
+  $('repeat').value =
+    src.recurrence?.freq === 'lunarYearly' ? 'yearly'
+    : src.recurrence?.freq === 'lunarMonthly' ? 'monthly'
+    : 'none';
+  $('reminder').value = src.reminderMinutes == null ? '' : String(src.reminderMinutes);
+  updateModeUI();
+  toggleTimeRow();
+  show('new');
+}
+
+// ---------------------------------------------------------------- settings
+
+async function loadCalendars() {
+  const select = $('calendar-select');
+  select.textContent = '';
+  const loading = document.createElement('option');
+  loading.textContent = t('calendarLoading');
+  select.appendChild(loading);
+  try {
+    const calendars = await listCalendars();
+    select.textContent = '';
+    for (const c of calendars) {
+      const opt = document.createElement('option');
+      opt.value = c.id;
+      opt.textContent = c.primary ? `${c.summary} (primary)` : c.summary;
+      select.appendChild(opt);
+    }
+    select.value = prefs.calendarId;
+    if (select.value !== prefs.calendarId) select.value = 'primary';
+  } catch (err) {
+    select.textContent = '';
+    const opt = document.createElement('option');
+    opt.value = 'primary';
+    opt.textContent = 'Primary';
+    select.appendChild(opt);
+    $('settings-error').textContent = err.message;
+  }
+}
+
+async function handleCreateCalendar() {
+  const btn = $('create-cal-btn');
+  if (btn.disabled) return; // in-flight; a second click must not create another
+  const errorEl = $('settings-error');
+  const statusEl = $('settings-status');
+  errorEl.textContent = '';
+  statusEl.textContent = '';
+  btn.disabled = true;
+  try {
+    const cal = await findOrCreateLunarCalendar();
+    prefs = { ...prefs, calendarId: cal.id, calendarName: cal.summary };
+    await setPrefs({ calendarId: cal.id, calendarName: cal.summary });
+    await loadCalendars();
+    $('calendar-select').value = cal.id;
+    statusEl.textContent = cal.created ? t('calendarCreated') : t('calendarExisting');
+    if (cal.duplicates > 1) {
+      errorEl.textContent = `${t('calendarDuplicates')} (${cal.duplicates})`;
+    }
+  } catch (err) {
+    errorEl.textContent = err.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function applyLanguage(lang) {
+  setLang(lang);
+  applyTranslations(document);
+  $('lang-select').value = lang;
+  $('lang-quick').value = lang;
+  renderToday();
+  updateModeUI();
+  toggleTimeRow();
+  renderHolidays();
+  await renderHistory();
+}
+
+function applyDefaultsToForm() {
+  const { day, month, year } = todayParts();
+  const [, , lunarYear] = convertSolar2Lunar(day, month, year);
+  $('in-year').value = lunarYear;
+  $('bulk-year').value = lunarYear;
+  $('holiday-year').value = lunarYear;
+  $('all-day').checked = prefs.allDayDefault;
+  $('reminder').value =
+    prefs.defaultReminderMinutes == null ? '' : String(prefs.defaultReminderMinutes);
+}
+
+// ---------------------------------------------------------------- wiring
+
+$('tabs').addEventListener('click', (e) => {
+  const tab = e.target.closest('.tab');
+  if (!tab) return;
+  const view = tab.dataset.view;
+  if (view === 'history') renderHistory();
+  if (view === 'holidays') renderHolidays();
+  if (view === 'settings') loadCalendars();
+  show(view);
+});
 
 $('event-form').addEventListener('submit', handlePreview);
-$('back-btn').addEventListener('click', () => show('form'));
+$('back-btn').addEventListener('click', () => show('new'));
 $('create-btn').addEventListener('click', handleCreate);
 $('another-btn').addEventListener('click', resetForm);
 $('all-day').addEventListener('change', toggleTimeRow);
-for (const id of ['lunar-day', 'lunar-month', 'lunar-year', 'leap-month']) {
+$('mode').addEventListener('change', updateModeUI);
+for (const id of ['in-day', 'in-month', 'in-year', 'leap-month']) {
   $(id).addEventListener('input', updateHint);
 }
+$('bulk-text').addEventListener('input', updateBulkStatus);
+$('bulk-year').addEventListener('input', updateBulkStatus);
 
-toggleTimeRow();
+$('holiday-year').addEventListener('input', renderHolidays);
+$('select-all-btn').addEventListener('click', () => {
+  const boxes = [...$('holiday-list').querySelectorAll('input[type=checkbox]')];
+  const allOn = boxes.every((b) => b.checked);
+  boxes.forEach((b) => (b.checked = !allOn));
+});
+$('add-holidays-btn').addEventListener('click', handleAddHolidays);
+
+$('clear-history-btn').addEventListener('click', async () => {
+  await clearHistory();
+  await renderHistory();
+});
+
+$('create-cal-btn').addEventListener('click', handleCreateCalendar);
+$('calendar-select').addEventListener('change', async (e) => {
+  const id = e.target.value;
+  const name = e.target.selectedOptions[0]?.textContent || '';
+  prefs = { ...prefs, calendarId: id, calendarName: name };
+  await setPrefs({ calendarId: id, calendarName: name });
+  $('settings-status').textContent = t('settingsSaved');
+});
+$('default-reminder').addEventListener('change', async (e) => {
+  const v = e.target.value === '' ? null : Number(e.target.value);
+  prefs = { ...prefs, defaultReminderMinutes: v };
+  await setPrefs({ defaultReminderMinutes: v });
+  $('reminder').value = e.target.value;
+  $('settings-status').textContent = t('settingsSaved');
+});
+
+for (const id of ['lang-select', 'lang-quick']) {
+  $(id).addEventListener('change', async (e) => {
+    prefs = { ...prefs, lang: e.target.value };
+    await setPrefs({ lang: e.target.value });
+    await applyLanguage(e.target.value);
+  });
+}
+
+// ---------------------------------------------------------------- init
+
+(async function init() {
+  prefs = await getPrefs();
+  setLang(prefs.lang);
+  applyTranslations(document);
+  $('lang-select').value = prefs.lang;
+  $('lang-quick').value = prefs.lang;
+  $('default-reminder').value =
+    prefs.defaultReminderMinutes == null ? '' : String(prefs.defaultReminderMinutes);
+  applyDefaultsToForm();
+  renderToday();
+  updateModeUI();
+  toggleTimeRow();
+  renderHolidays();
+  show('new');
+})();

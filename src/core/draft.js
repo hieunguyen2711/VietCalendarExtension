@@ -9,7 +9,7 @@
 
 import { jdFromDate, jdToDate } from './lunar.js';
 import { describe as describeRecurrence } from './recurrence.js';
-import { lunarAnniversaryDates } from './occurrences.js';
+import { lunarAnniversaryDates, lunarMonthlyDates } from './occurrences.js';
 import { zodiacForLunarYear, describeZodiac } from './zodiac.js';
 
 /**
@@ -70,7 +70,16 @@ function humanDate({ day, month, year }) {
  * @property {string} [timeZone] IANA zone the EVENT is scheduled in; defaults
  *           to the user's local zone. Unrelated to the UTC+7 used to convert
  *           the lunar date.
+ * @property {number|null} [reminderMinutes] popup reminder N minutes before,
+ *           or null to use the calendar's default reminders.
+ * @property {string} [lang] 'en' | 'vi', for preview text only.
  */
+
+/** Max dates per RDATE line; long recurrence sets are split across several. */
+const RDATE_CHUNK = 100;
+
+/** Google Calendar caps reminders at 4 weeks before the event. */
+const MAX_REMINDER_MINUTES = 40320;
 
 /**
  * Build a draft object containing everything the confirmation screen shows and
@@ -87,6 +96,8 @@ export function buildDraft(input) {
     durationMinutes = 60,
     recurrence,
     timeZone = localTimeZone(),
+    reminderMinutes = null,
+    lang = 'en',
   } = input;
 
   const zodiac = zodiacForLunarYear(lunar.year);
@@ -97,12 +108,17 @@ export function buildDraft(input) {
     `Zodiac year: ${describeZodiac(zodiac)}.\n` +
     `Created with Viet Calendar extension.`;
 
-  // For a lunar-yearly recurrence, expand to the actual Gregorian dates the
-  // lunar date lands on across the horizon. occurrences[0] is this year's date.
-  const occurrences =
-    recurrence?.freq === 'lunarYearly'
-      ? lunarAnniversaryDates(lunar, recurrence.years)
-      : [gregorian];
+  // Lunar recurrences expand to the actual Gregorian dates the lunar date lands
+  // on. occurrences[0] is the original date (it becomes DTSTART).
+  let occurrences;
+  if (recurrence?.freq === 'lunarYearly') {
+    occurrences = lunarAnniversaryDates(lunar, recurrence.years);
+  } else if (recurrence?.freq === 'lunarMonthly') {
+    occurrences = lunarMonthlyDates(lunar, recurrence.years);
+  } else {
+    occurrences = [gregorian];
+  }
+  if (!occurrences.length) occurrences = [gregorian];
 
   /** @type {Record<string, any>} */
   const googleEvent = {
@@ -117,8 +133,10 @@ export function buildDraft(input) {
     whenText = `${humanDate(gregorian)} (all day)`;
     if (occurrences.length > 1) {
       // RDATE carries the *additional* occurrences (DTSTART is the first).
-      const dates = occurrences.slice(1).map((g) => toBasicDate(g)).join(',');
-      googleEvent.recurrence = [`RDATE;VALUE=DATE:${dates}`];
+      googleEvent.recurrence = chunkRDates(
+        occurrences.slice(1).map(toBasicDate),
+        (dates) => `RDATE;VALUE=DATE:${dates}`
+      );
     }
   } else {
     if (!start) throw new Error('Timed event requires a start time.');
@@ -135,12 +153,25 @@ export function buildDraft(input) {
     whenText = `${humanDate(gregorian)} at ${pad2(start.hour)}:${pad2(start.minute)}`;
     if (occurrences.length > 1) {
       const timeSuffix = `T${pad2(start.hour)}${pad2(start.minute)}00`;
-      const dates = occurrences.slice(1).map((g) => toBasicDate(g) + timeSuffix).join(',');
-      googleEvent.recurrence = [`RDATE;TZID=${timeZone}:${dates}`];
+      googleEvent.recurrence = chunkRDates(
+        occurrences.slice(1).map((g) => toBasicDate(g) + timeSuffix),
+        (dates) => `RDATE;TZID=${timeZone}:${dates}`
+      );
     }
   }
 
-  let recurrenceText = describeRecurrence(recurrence);
+  // Reminders. A giỗ needs preparation time, so an advance reminder is the
+  // common case; null means "leave the calendar's own defaults alone".
+  if (reminderMinutes != null) {
+    googleEvent.reminders = {
+      useDefault: false,
+      overrides: [
+        { method: 'popup', minutes: Math.min(reminderMinutes, MAX_REMINDER_MINUTES) },
+      ],
+    };
+  }
+
+  let recurrenceText = describeRecurrence(recurrence, lang);
   if (occurrences.length > 1) {
     const first = occurrences[0].year;
     const last = occurrences[occurrences.length - 1].year;
@@ -160,15 +191,50 @@ export function buildDraft(input) {
       // Next few Gregorian dates, so the user sees the lunar drift is real.
       upcoming: occurrences.slice(0, 5).map(humanDate),
       isRecurring: occurrences.length > 1,
+      reminderText: describeReminder(reminderMinutes, lang),
       // All-day events are floating dates in Google Calendar — no zone applies.
-      timezone: allDay ? 'All-day (no timezone)' : timeZone,
+      timezone: allDay
+        ? (lang === 'vi' ? 'Cả ngày (không có múi giờ)' : 'All-day (no timezone)')
+        : timeZone,
     },
     // The exact payload sent to Google Calendar:
     googleEvent,
+    // Kept so the extension can rebuild/extend this event later.
+    source: { lunar, recurrence, allDay, start, timeZone, reminderMinutes },
   };
+}
+
+/** Human-readable reminder summary. */
+export function describeReminder(minutes, lang = 'en') {
+  const vi = lang === 'vi';
+  if (minutes == null) return vi ? 'Mặc định của lịch' : 'Calendar default';
+  if (minutes === 0) return vi ? 'Lúc bắt đầu' : 'At time of event';
+  const days = minutes / (24 * 60);
+  if (Number.isInteger(days) && days >= 1) {
+    if (days === 7) return vi ? 'Trước 1 tuần' : '1 week before';
+    return vi ? `Trước ${days} ngày` : `${days} day${days > 1 ? 's' : ''} before`;
+  }
+  const hours = minutes / 60;
+  if (Number.isInteger(hours)) {
+    return vi ? `Trước ${hours} giờ` : `${hours} hour${hours > 1 ? 's' : ''} before`;
+  }
+  return vi ? `Trước ${minutes} phút` : `${minutes} minutes before`;
 }
 
 /** "YYYYMMDD" (RFC 5545 basic date form) for RDATE. */
 function toBasicDate({ day, month, year }) {
   return `${year}${pad2(month)}${pad2(day)}`;
+}
+
+/**
+ * Split a long date list across several RDATE properties. RFC 5545 allows
+ * repeating the property, and a monthly recurrence can reach several hundred
+ * dates — one enormous line risks being rejected.
+ */
+function chunkRDates(values, format) {
+  const lines = [];
+  for (let i = 0; i < values.length; i += RDATE_CHUNK) {
+    lines.push(format(values.slice(i, i + RDATE_CHUNK).join(',')));
+  }
+  return lines;
 }

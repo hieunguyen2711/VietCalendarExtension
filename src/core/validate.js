@@ -5,7 +5,13 @@
  * "impossible or ambiguous" inputs before we ever convert or hit the network.
  */
 
-import { convertLunar2Solar, convertSolar2Lunar, VN_TIMEZONE } from './lunar.js';
+import {
+  convertLunar2Solar,
+  convertSolar2Lunar,
+  jdFromDate,
+  jdToDate,
+  VN_TIMEZONE,
+} from './lunar.js';
 
 /** @typedef {{ ok: true, value: any } | { ok: false, errors: string[] }} Result */
 
@@ -65,6 +71,46 @@ export function validateLunarDate({ day, month, year, isLeapMonth = false }) {
     value: {
       gregorian: { day: gd, month: gm, year: gy },
       lunar: { day, month, year, isLeapMonth: !!leap },
+    },
+  };
+}
+
+/**
+ * Validate a Gregorian date the user typed, and resolve the lunar date it maps
+ * to. This is the reverse-lookup path: most people know a relative's Gregorian
+ * death date from a document, but the giỗ is observed on the lunar date.
+ * @returns {Result} value is { gregorian, lunar } — same shape as
+ *          validateLunarDate, so downstream code doesn't branch.
+ */
+export function validateSolarDate({ day, month, year }) {
+  const errors = [];
+
+  for (const [name, v] of [['day', day], ['month', month], ['year', year]]) {
+    if (!Number.isInteger(v)) errors.push(`Gregorian ${name} must be a whole number.`);
+  }
+  if (errors.length) return { ok: false, errors };
+
+  if (month < 1 || month > 12) errors.push('Month must be between 1 and 12.');
+  if (day < 1 || day > 31) errors.push('Day must be between 1 and 31.');
+  if (year < MIN_YEAR || year > MAX_YEAR) {
+    errors.push(`Year must be between ${MIN_YEAR} and ${MAX_YEAR}.`);
+  }
+  if (errors.length) return { ok: false, errors };
+
+  // Reject dates that don't exist (31 February, 30 February, etc.) by round-
+  // tripping through the Julian Day number.
+  const [rd, rm, ry] = jdToDate(jdFromDate(day, month, year));
+  if (rd !== day || rm !== month || ry !== year) {
+    errors.push(`${day}/${month}/${year} is not a real date.`);
+    return { ok: false, errors };
+  }
+
+  const [ld, lm, ly, ll] = convertSolar2Lunar(day, month, year, VN_TIMEZONE);
+  return {
+    ok: true,
+    value: {
+      gregorian: { day, month, year },
+      lunar: { day: ld, month: lm, year: ly, isLeapMonth: !!ll },
     },
   };
 }

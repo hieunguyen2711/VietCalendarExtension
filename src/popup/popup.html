@@ -8,106 +8,213 @@
   <body>
     <main class="app">
       <header class="header">
-        <h1>Viet Calendar</h1>
-        <p class="subtitle">Âm lịch → Google Calendar</p>
+        <div class="header-row">
+          <h1 data-i18n="appName">Viet Calendar</h1>
+          <select id="lang-quick" class="lang-quick" aria-label="Language">
+            <option value="en">EN</option>
+            <option value="vi">VI</option>
+          </select>
+        </div>
+        <p id="today-line" class="today"></p>
       </header>
 
-      <!-- STEP 1: form -->
-      <section id="form-view" class="view">
+      <nav class="tabs" id="tabs">
+        <button class="tab active" data-view="new" data-i18n="navNew">New</button>
+        <button class="tab" data-view="holidays" data-i18n="navHolidays">Holidays</button>
+        <button class="tab" data-view="history" data-i18n="navHistory">History</button>
+        <button class="tab" data-view="settings" data-i18n="navSettings">Settings</button>
+      </nav>
+
+      <!-- ============ NEW EVENT ============ -->
+      <section id="new-view" class="view">
         <form id="event-form" novalidate>
           <label class="field">
-            <span>Event title</span>
-            <input id="title" type="text" placeholder="e.g. Giỗ ông nội" autocomplete="off" />
+            <span data-i18n="modeLabel">Enter date as</span>
+            <select id="mode">
+              <option value="lunar" data-i18n="modeLunar">Lunar (âm lịch)</option>
+              <option value="solar" data-i18n="modeSolar">Gregorian (dương lịch)</option>
+              <option value="bulk" data-i18n="modeBulk">Multiple events</option>
+            </select>
           </label>
 
-          <fieldset class="field lunar-date">
-            <legend>Lunar date (âm lịch)</legend>
-            <div class="row">
-              <label>
-                <span>Day</span>
-                <input id="lunar-day" type="number" min="1" max="30" inputmode="numeric" />
-              </label>
-              <label>
-                <span>Month</span>
-                <input id="lunar-month" type="number" min="1" max="12" inputmode="numeric" />
-              </label>
-              <label>
-                <span>Year</span>
-                <input id="lunar-year" type="number" min="1900" max="2199" inputmode="numeric" />
-              </label>
-            </div>
-            <div id="leap-row" class="leap-row hidden">
-              <label class="checkbox">
-                <input id="leap-month" type="checkbox" />
-                <span id="leap-label">This is the leap month</span>
-              </label>
-              <p id="leap-explain" class="hint"></p>
-            </div>
-            <p id="converted-hint" class="hint" aria-live="polite"></p>
-          </fieldset>
+          <!-- single-event fields -->
+          <div id="single-fields">
+            <label class="field">
+              <span data-i18n="title">Event title</span>
+              <input id="title" type="text" data-i18n-placeholder="titlePlaceholder" autocomplete="off" />
+            </label>
+
+            <fieldset class="field">
+              <legend id="date-legend">Lunar date (âm lịch)</legend>
+              <div class="row">
+                <label>
+                  <span data-i18n="day">Day</span>
+                  <input id="in-day" type="number" min="1" max="31" inputmode="numeric" />
+                </label>
+                <label>
+                  <span data-i18n="month">Month</span>
+                  <input id="in-month" type="number" min="1" max="12" inputmode="numeric" />
+                </label>
+                <label>
+                  <span data-i18n="year">Year</span>
+                  <input id="in-year" type="number" min="1900" max="2199" inputmode="numeric" />
+                </label>
+              </div>
+              <div id="leap-row" class="leap-row hidden">
+                <label class="checkbox">
+                  <input id="leap-month" type="checkbox" />
+                  <span id="leap-label" data-i18n="leapMonth">This is the leap month</span>
+                </label>
+                <p id="leap-explain" class="hint"></p>
+              </div>
+              <p id="converted-hint" class="hint" aria-live="polite"></p>
+            </fieldset>
+          </div>
+
+          <!-- bulk fields -->
+          <div id="bulk-fields" class="hidden">
+            <p class="hint" data-i18n="bulkHelp"></p>
+            <textarea id="bulk-text" rows="6" data-i18n-placeholder="bulkPlaceholder"></textarea>
+            <label class="field">
+              <span data-i18n="year">Year</span>
+              <input id="bulk-year" type="number" min="1900" max="2199" inputmode="numeric" />
+            </label>
+            <p id="bulk-status" class="hint" aria-live="polite"></p>
+          </div>
 
           <fieldset class="field">
-            <legend>Time</legend>
+            <legend data-i18n="timeSection">Time</legend>
             <label class="checkbox">
               <input id="all-day" type="checkbox" checked />
-              <span>All-day event</span>
+              <span data-i18n="allDay">All-day event</span>
             </label>
             <label id="time-row" class="hidden">
-              <span>Start time</span>
+              <span data-i18n="startTime">Start time</span>
               <input id="start-time" type="time" value="09:00" />
             </label>
             <p id="tz-hint" class="hint hidden"></p>
           </fieldset>
 
-          <label class="checkbox">
-            <input id="annual" type="checkbox" />
-            <span>Repeat every year on the same lunar date (âm lịch)</span>
+          <label class="field">
+            <span data-i18n="repeats">Repeats</span>
+            <select id="repeat">
+              <option value="none" data-i18n="repeatNone">Does not repeat</option>
+              <option value="yearly" data-i18n="repeatYearly">Every year (same lunar date)</option>
+              <option value="monthly" data-i18n="repeatMonthly">Every lunar month</option>
+            </select>
+          </label>
+
+          <label class="field">
+            <span data-i18n="reminder">Remind me</span>
+            <select id="reminder">
+              <option value="" data-i18n="reminderNone">Use calendar default</option>
+              <option value="0" data-i18n="reminderSameDay">On the day</option>
+              <option value="1440" data-i18n="reminder1">1 day before</option>
+              <option value="4320" data-i18n="reminder3">3 days before</option>
+              <option value="10080" data-i18n="reminder7">1 week before</option>
+            </select>
           </label>
 
           <p id="form-error" class="error" role="alert" aria-live="assertive"></p>
-
-          <button id="preview-btn" type="submit" class="primary">Preview →</button>
+          <button id="preview-btn" type="submit" class="primary" data-i18n="preview">Preview →</button>
         </form>
       </section>
 
-      <!-- STEP 2: confirmation -->
+      <!-- ============ CONFIRM ============ -->
       <section id="confirm-view" class="view hidden">
-        <h2>Confirm event</h2>
+        <h2 data-i18n="confirmTitle">Confirm event</h2>
         <dl class="summary">
-          <dt>Title</dt>
-          <dd id="c-title"></dd>
-          <dt>Lunar date</dt>
-          <dd id="c-lunar"></dd>
-          <dt>Gregorian date</dt>
-          <dd id="c-gregorian"></dd>
-          <dt>Zodiac year</dt>
-          <dd id="c-zodiac"></dd>
-          <dt>Repeats</dt>
-          <dd id="c-recurrence"></dd>
-          <dt>Timezone</dt>
-          <dd id="c-timezone"></dd>
+          <dt data-i18n="fieldTitle">Title</dt><dd id="c-title"></dd>
+          <dt data-i18n="fieldLunar">Lunar date</dt><dd id="c-lunar"></dd>
+          <dt data-i18n="fieldGregorian">Gregorian date</dt><dd id="c-gregorian"></dd>
+          <dt data-i18n="fieldZodiac">Zodiac year</dt><dd id="c-zodiac"></dd>
+          <dt data-i18n="fieldRepeats">Repeats</dt><dd id="c-recurrence"></dd>
+          <dt data-i18n="fieldReminder">Reminder</dt><dd id="c-reminder"></dd>
+          <dt data-i18n="fieldCalendar">Calendar</dt><dd id="c-calendar"></dd>
+          <dt data-i18n="fieldTimezone">Timezone</dt><dd id="c-timezone"></dd>
         </dl>
         <div id="c-upcoming-wrap" class="upcoming hidden">
-          <p class="hint">Next occurrences (Gregorian):</p>
+          <p class="hint" data-i18n="upcomingLabel">Next occurrences (Gregorian):</p>
           <ul id="c-upcoming"></ul>
         </div>
+        <div id="c-batch-wrap" class="upcoming hidden">
+          <ul id="c-batch"></ul>
+        </div>
         <p id="confirm-error" class="error" role="alert" aria-live="assertive"></p>
-        <p class="hint">This will create an event in your primary Google Calendar.</p>
+        <p class="hint" data-i18n="willCreate">This will create an event in the calendar shown above.</p>
         <div class="actions">
-          <button id="back-btn" type="button" class="secondary">← Back</button>
-          <button id="create-btn" type="button" class="primary">Create event</button>
+          <button id="back-btn" type="button" class="secondary" data-i18n="back">← Back</button>
+          <button id="create-btn" type="button" class="primary" data-i18n="create">Create event</button>
         </div>
       </section>
 
-      <!-- STEP 3: success -->
+      <!-- ============ SUCCESS ============ -->
       <section id="success-view" class="view hidden">
         <div class="success-icon">✓</div>
-        <h2>Event created</h2>
-        <p class="hint">Your event was added to Google Calendar.</p>
+        <h2 data-i18n="successTitle">Event created</h2>
+        <p id="success-body" class="hint" data-i18n="successBody">Your event was added to Google Calendar.</p>
         <div class="actions">
-          <a id="open-link" class="secondary button" target="_blank" rel="noopener">Open in Calendar</a>
-          <button id="another-btn" type="button" class="primary">Create another</button>
+          <a id="open-link" class="secondary button" target="_blank" rel="noopener" data-i18n="openInCalendar">Open in Calendar</a>
+          <button id="another-btn" type="button" class="primary" data-i18n="createAnother">Create another</button>
         </div>
+      </section>
+
+      <!-- ============ HOLIDAYS ============ -->
+      <section id="holidays-view" class="view hidden">
+        <p class="hint" data-i18n="holidaysIntro">Add Vietnamese lunar holidays for a given year.</p>
+        <div class="row">
+          <label style="flex:1">
+            <span data-i18n="holidayYear">Lunar year</span>
+            <input id="holiday-year" type="number" min="1900" max="2199" inputmode="numeric" />
+          </label>
+          <label style="flex:0 0 auto; align-self:flex-end">
+            <button id="select-all-btn" type="button" class="secondary" data-i18n="selectAll">Select all</button>
+          </label>
+        </div>
+        <ul id="holiday-list" class="holiday-list"></ul>
+        <p id="holiday-error" class="error" role="alert"></p>
+        <button id="add-holidays-btn" type="button" class="primary" data-i18n="addSelected">Add selected</button>
+      </section>
+
+      <!-- ============ HISTORY ============ -->
+      <section id="history-view" class="view hidden">
+        <p class="hint" data-i18n="historyIntro">Events created with this extension.</p>
+        <ul id="history-list" class="history-list"></ul>
+        <p id="history-error" class="error" role="alert"></p>
+        <button id="clear-history-btn" type="button" class="secondary" data-i18n="clearHistory">Clear list</button>
+      </section>
+
+      <!-- ============ SETTINGS ============ -->
+      <section id="settings-view" class="view hidden">
+        <label class="field">
+          <span data-i18n="language">Language</span>
+          <select id="lang-select">
+            <option value="en">English</option>
+            <option value="vi">Tiếng Việt</option>
+          </select>
+        </label>
+
+        <label class="field">
+          <span data-i18n="calendar">Calendar</span>
+          <select id="calendar-select"></select>
+        </label>
+        <button id="create-cal-btn" type="button" class="secondary" data-i18n="createCalendar">
+          Use a dedicated "Lịch Âm" calendar
+        </button>
+
+        <label class="field" style="margin-top:14px">
+          <span data-i18n="defaultReminder">Default reminder</span>
+          <select id="default-reminder">
+            <option value="" data-i18n="reminderNone">Use calendar default</option>
+            <option value="0" data-i18n="reminderSameDay">On the day</option>
+            <option value="1440" data-i18n="reminder1">1 day before</option>
+            <option value="4320" data-i18n="reminder3">3 days before</option>
+            <option value="10080" data-i18n="reminder7">1 week before</option>
+          </select>
+        </label>
+
+        <p id="settings-status" class="hint" aria-live="polite"></p>
+        <p id="settings-error" class="error" role="alert"></p>
       </section>
     </main>
 

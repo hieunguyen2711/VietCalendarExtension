@@ -19,10 +19,14 @@
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
   },
-  "permissions": ["identity"],
+  "permissions": ["identity", "storage"],
   "host_permissions": ["https://www.googleapis.com/"],
   "oauth2": {
     "client_id": "1062072614362-d2fnj23ljg6ui4rb96ru3o7du8b1p2dg.apps.googleusercontent.com",
-    "scopes": ["https://www.googleapis.com/auth/calendar.events"]
+    "scopes": [
+      "https://www.googleapis.com/auth/calendar.events",
+      "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
+      "https://www.googleapis.com/auth/calendar.app.created"
+    ]
   }
 }
