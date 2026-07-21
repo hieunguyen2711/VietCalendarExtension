@@ -1,0 +1,10 @@
+{
+  "name": "viet-calendar-extension",
+  "version": "0.1.0",
+  "description": "Chrome extension: create Google Calendar events from Vietnamese lunar dates",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "test": "node --test"
+  }
+}

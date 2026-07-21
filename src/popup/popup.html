@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Viet Calendar</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main class="app">
+      <header class="header">
+        <h1>Viet Calendar</h1>
+        <p class="subtitle">Âm lịch → Google Calendar</p>
+      </header>
+
+      <!-- STEP 1: form -->
+      <section id="form-view" class="view">
+        <form id="event-form" novalidate>
+          <label class="field">
+            <span>Event title</span>
+            <input id="title" type="text" placeholder="e.g. Giỗ ông nội" autocomplete="off" />
+          </label>
+
+          <fieldset class="field lunar-date">
+            <legend>Lunar date (âm lịch)</legend>
+            <div class="row">
+              <label>
+                <span>Day</span>
+                <input id="lunar-day" type="number" min="1" max="30" inputmode="numeric" />
+              </label>
+              <label>
+                <span>Month</span>
+                <input id="lunar-month" type="number" min="1" max="12" inputmode="numeric" />
+              </label>
+              <label>
+                <span>Year</span>
+                <input id="lunar-year" type="number" min="1900" max="2199" inputmode="numeric" />
+              </label>
+            </div>
+            <div id="leap-row" class="leap-row hidden">
+              <label class="checkbox">
+                <input id="leap-month" type="checkbox" />
+                <span id="leap-label">This is the leap month</span>
+              </label>
+              <p id="leap-explain" class="hint"></p>
+            </div>
+            <p id="converted-hint" class="hint" aria-live="polite"></p>
+          </fieldset>
+
+          <fieldset class="field">
+            <legend>Time</legend>
+            <label class="checkbox">
+              <input id="all-day" type="checkbox" checked />
+              <span>All-day event</span>
+            </label>
+            <label id="time-row" class="hidden">
+              <span>Start time</span>
+              <input id="start-time" type="time" value="09:00" />
+            </label>
+          </fieldset>
+
+          <label class="checkbox">
+            <input id="annual" type="checkbox" />
+            <span>Repeat every year on the same lunar date (âm lịch)</span>
+          </label>
+
+          <p id="form-error" class="error" role="alert" aria-live="assertive"></p>
+
+          <button id="preview-btn" type="submit" class="primary">Preview →</button>
+        </form>
+      </section>
+
+      <!-- STEP 2: confirmation -->
+      <section id="confirm-view" class="view hidden">
+        <h2>Confirm event</h2>
+        <dl class="summary">
+          <dt>Title</dt>
+          <dd id="c-title"></dd>
+          <dt>Lunar date</dt>
+          <dd id="c-lunar"></dd>
+          <dt>Gregorian date</dt>
+          <dd id="c-gregorian"></dd>
+          <dt>Zodiac year</dt>
+          <dd id="c-zodiac"></dd>
+          <dt>Repeats</dt>
+          <dd id="c-recurrence"></dd>
+          <dt>Timezone</dt>
+          <dd id="c-timezone"></dd>
+        </dl>
+        <div id="c-upcoming-wrap" class="upcoming hidden">
+          <p class="hint">Next occurrences (Gregorian):</p>
+          <ul id="c-upcoming"></ul>
+        </div>
+        <p id="confirm-error" class="error" role="alert" aria-live="assertive"></p>
+        <p class="hint">This will create an event in your primary Google Calendar.</p>
+        <div class="actions">
+          <button id="back-btn" type="button" class="secondary">← Back</button>
+          <button id="create-btn" type="button" class="primary">Create event</button>
+        </div>
+      </section>
+
+      <!-- STEP 3: success -->
+      <section id="success-view" class="view hidden">
+        <div class="success-icon">✓</div>
+        <h2>Event created</h2>
+        <p class="hint">Your event was added to Google Calendar.</p>
+        <div class="actions">
+          <a id="open-link" class="secondary button" target="_blank" rel="noopener">Open in Calendar</a>
+          <button id="another-btn" type="button" class="primary">Create another</button>
+        </div>
+      </section>
+    </main>
+
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>

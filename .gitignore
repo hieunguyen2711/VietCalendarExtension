@@ -1,0 +1,23 @@
+# Dependencies
+node_modules/
+
+# OS noise
+.DS_Store
+Thumbs.db
+
+# Extension packaging
+# *.pem is the PRIVATE signing key for a packed .crx — it controls your
+# extension's identity. Never commit it.
+*.pem
+*.crx
+*.zip
+dist/
+
+# Editor
+.vscode/
+.idea/
+*.swp
+
+# Logs
+*.log
+npm-debug.log*
