@@ -8,7 +8,7 @@ import { validateLunarDate, validateTitle, validateTime } from '../core/validate
 import { getLeapMonthOfYear } from '../core/lunar.js';
 import { zodiacForLunarYear } from '../core/zodiac.js';
 import { NONE, lunarYearly } from '../core/recurrence.js';
-import { buildDraft } from '../core/draft.js';
+import { buildDraft, localTimeZone } from '../core/draft.js';
 import { insertEvent } from '../calendar/calendarService.js';
 
 const $ = (id) => document.getElementById(id);
@@ -90,7 +90,14 @@ function updateHint() {
 }
 
 function toggleTimeRow() {
-  $('time-row').classList.toggle('hidden', $('all-day').checked);
+  const allDay = $('all-day').checked;
+  $('time-row').classList.toggle('hidden', allDay);
+  // All-day events float (no zone); timed ones use the user's own zone.
+  const tzHint = $('tz-hint');
+  tzHint.classList.toggle('hidden', allDay);
+  if (!allDay) {
+    tzHint.textContent = `Time is in your timezone: ${localTimeZone()}`;
+  }
 }
 
 // --- Step 1 -> 2: build draft ----------------------------------------------

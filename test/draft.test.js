@@ -42,6 +42,7 @@ test('lunar-yearly timed recurrence uses TZID RDATE with the event time', () => 
   const { googleEvent } = buildDraft({
     title: 'Cúng', gregorian: greg, lunar: baseLunar, allDay: false,
     start: { hour: 9, minute: 0 }, recurrence: lunarYearly({ years: 3 }),
+    timeZone: VN_TZID,
   });
   assert.equal(googleEvent.recurrence[0], `RDATE;TZID=${VN_TZID}:20270206T090000,20280126T090000`);
 });
@@ -49,10 +50,43 @@ test('lunar-yearly timed recurrence uses TZID RDATE with the event time', () => 
 test('timed event sets dateTime, timezone, and 60-min default end', () => {
   const { googleEvent } = buildDraft({
     title: 'Cúng', gregorian: greg, lunar: baseLunar, allDay: false,
-    start: { hour: 9, minute: 0 }, recurrence: NONE,
+    start: { hour: 9, minute: 0 }, recurrence: NONE, timeZone: VN_TZID,
   });
   assert.deepEqual(googleEvent.start, { dateTime: '2026-02-17T09:00:00', timeZone: VN_TZID });
   assert.deepEqual(googleEvent.end, { dateTime: '2026-02-17T10:00:00', timeZone: VN_TZID });
+});
+
+test('timed event uses the USER\'s timezone, not Vietnam\'s', () => {
+  // A user in California asking for 09:00 means 09:00 Pacific — not 09:00 in
+  // Hanoi (which would land the previous evening for them).
+  const tz = 'America/Los_Angeles';
+  const { googleEvent, preview } = buildDraft({
+    title: 'Giỗ', gregorian: greg, lunar: baseLunar, allDay: false,
+    start: { hour: 9, minute: 0 }, recurrence: NONE, timeZone: tz,
+  });
+  assert.deepEqual(googleEvent.start, { dateTime: '2026-02-17T09:00:00', timeZone: tz });
+  assert.deepEqual(googleEvent.end, { dateTime: '2026-02-17T10:00:00', timeZone: tz });
+  assert.equal(preview.timezone, tz);
+});
+
+test('all-day events are floating — no timezone applied', () => {
+  const { googleEvent, preview } = buildDraft({
+    title: 'Tết', gregorian: greg, lunar: baseLunar, allDay: true,
+    recurrence: NONE, timeZone: 'America/Los_Angeles',
+  });
+  assert.deepEqual(googleEvent.start, { date: '2026-02-17' });
+  assert.equal(googleEvent.start.timeZone, undefined);
+  assert.match(preview.timezone, /All-day/);
+});
+
+test('lunar conversion is NOT affected by the user timezone', () => {
+  // The same lunar date must resolve identically regardless of where the user
+  // is — the Vietnamese calendar is defined at UTC+7.
+  const mk = (tz) => buildDraft({
+    title: 'x', gregorian: greg, lunar: baseLunar, allDay: true,
+    recurrence: lunarYearly({ years: 5 }), timeZone: tz,
+  }).googleEvent.recurrence[0];
+  assert.equal(mk('America/Los_Angeles'), mk('Asia/Ho_Chi_Minh'));
 });
 
 test('timed event past midnight rolls the end date forward', () => {
