@@ -30,6 +30,23 @@ export function getAuthToken(interactive = true) {
   });
 }
 
+/**
+ * Whether we already hold a token without prompting.
+ *
+ * Used to sign in BEFORE the user fills anything in. Chrome destroys the action
+ * popup whenever it loses focus — including when the OAuth consent window
+ * opens — so triggering sign-in at submit time discards everything the user
+ * typed. Checking up front means the teardown happens on an empty form.
+ */
+export async function isSignedIn() {
+  try {
+    await getAuthToken(false);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** Remove a cached (e.g. expired/revoked) token so the next call re-fetches. */
 export function removeCachedToken(token) {
   return new Promise((resolve) => {

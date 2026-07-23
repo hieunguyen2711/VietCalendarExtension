@@ -163,10 +163,15 @@ function getLeapMonthOffset(a11, timeZone) {
  */
 export function convertSolar2Lunar(dd, mm, yy, timeZone = VN_TIMEZONE) {
   const dayNumber = jdFromDate(dd, mm, yy);
-  const k = INT((dayNumber - 2415021.076998695) / 29.530588853);
+  let k = INT((dayNumber - 2415021.076998695) / 29.530588853);
   let monthStart = getNewMoonDay(k + 1, timeZone);
-  if (monthStart > dayNumber) {
-    monthStart = getNewMoonDay(k, timeZone);
+  // The k estimate can overshoot by more than a single lunation, so stepping
+  // back only once is not enough: when it isn't, lunarDay below computes to 0
+  // and the month comes out wrong too (e.g. 2054-05-07, 2062-04-09). Keep
+  // walking back until the month start is on or before the target day.
+  while (monthStart > dayNumber) {
+    k -= 1;
+    monthStart = getNewMoonDay(k + 1, timeZone);
   }
   let a11 = getLunarMonth11(yy, timeZone);
   let b11 = a11;

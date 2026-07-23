@@ -210,7 +210,13 @@ export function buildDraft(input) {
     // The exact payload sent to Google Calendar:
     googleEvent,
     // Kept so the extension can rebuild/extend this event later.
-    source: { lunar, recurrence, allDay, start, timeZone, reminderMinutes, colorId },
+    // Everything needed to rebuild this draft from scratch — used to
+    // re-render the preview in another language, and to restore an event into
+    // the form from History.
+    source: {
+      gregorian, lunar, recurrence, allDay, start,
+      durationMinutes, timeZone, reminderMinutes, colorId,
+    },
   };
 }
 

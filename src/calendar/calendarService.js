@@ -52,6 +52,24 @@ export async function listCalendars() {
 }
 
 /**
+ * The signed-in account's email address.
+ *
+ * Derived from the primary calendar, whose id IS the account email — so this
+ * needs no extra OAuth scope beyond what we already hold. Returns null rather
+ * than throwing: showing the account is informational, never load-bearing.
+ */
+export async function getAccountEmail() {
+  try {
+    const res = await apiFetch('/calendars/primary');
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.id || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Calendars whose name matches the lunar calendar name.
  * Pure, so the matching rule is unit-testable. Comparison ignores surrounding
  * whitespace and case, since the name may have been edited in Google Calendar.
@@ -143,8 +161,14 @@ export async function insertEvent(googleEvent, calendarId = 'primary', requestId
     const err = new Error(`Google Calendar error (${res.status}): ${await errorMessage(res)}`);
     // Callers need to distinguish "the target calendar is gone" from other
     // failures, so they can recover instead of just showing a raw message.
+    //
+    // ONLY 404 means missing. 403 must NOT be treated as missing: Google
+    // returns it for rateLimitExceeded/quotaExceeded, which a bulk insert loop
+    // provokes routinely, and for read-only ACLs. Conflating them made a
+    // transient rate limit permanently erase the user's calendar preference.
     err.status = res.status;
-    err.calendarMissing = res.status === 404 || res.status === 403;
+    err.calendarMissing = res.status === 404;
+    err.rateLimited = res.status === 403 || res.status === 429;
     throw err;
   }
 
@@ -152,12 +176,37 @@ export async function insertEvent(googleEvent, calendarId = 'primary', requestId
   return { id: data.id, htmlLink: data.htmlLink };
 }
 
-/** Fetch a single event, or null if it isn't there. */
+/** Fetch a single event, or null if it isn't there (or was deleted). */
 export async function getEvent(calendarId, eventId) {
   const res = await apiFetch(
     `/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`
   );
   if (!res.ok) return null;
+  const data = await res.json();
+  // A deleted event is still returned, with status "cancelled". Treating that
+  // as a successful insert would report "created" for an event that isn't
+  // there — Google reserves deleted ids, so this is reachable by deleting an
+  // event and re-creating an identical one.
+  if (data.status === 'cancelled') return null;
+  return { id: data.id, htmlLink: data.htmlLink };
+}
+
+/**
+ * Update an existing event in place, keeping its id (and therefore the user's
+ * RSVPs, reminders history and any links to it). PATCH rather than PUT so
+ * fields we don't send are preserved.
+ */
+export async function updateEvent(calendarId, eventId, googleEvent) {
+  const res = await apiFetch(
+    `/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`,
+    { method: 'PATCH', body: JSON.stringify(googleEvent) }
+  );
+  if (!res.ok) {
+    const err = new Error(`Google Calendar error (${res.status}): ${await errorMessage(res)}`);
+    err.status = res.status;
+    err.calendarMissing = res.status === 404;
+    throw err;
+  }
   const data = await res.json();
   return { id: data.id, htmlLink: data.htmlLink };
 }
