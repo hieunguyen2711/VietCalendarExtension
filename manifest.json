@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Viet Calendar → Google Calendar",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Create Google Calendar events from Vietnamese lunar (âm lịch) dates, with optional annual recurrence.",
   "action": {
     "default_title": "Viet Calendar",
@@ -22,7 +22,7 @@
   "permissions": ["identity", "storage"],
   "host_permissions": ["https://www.googleapis.com/"],
   "oauth2": {
-    "client_id": "1062072614362-d2fnj23ljg6ui4rb96ru3o7du8b1p2dg.apps.googleusercontent.com",
+    "client_id": "1062072614362-akqnlq213807bel34e324fiorr0tu0ur.apps.googleusercontent.com",
     "scopes": [
       "https://www.googleapis.com/auth/calendar.events",
       "https://www.googleapis.com/auth/calendar.calendarlist",
