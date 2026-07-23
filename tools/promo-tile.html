@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 440px; height: 280px; overflow: hidden; }
+      .tile {
+        width: 440px;
+        height: 280px;
+        display: flex;
+        align-items: center;
+        gap: 26px;
+        padding: 0 40px;
+        background: radial-gradient(circle at 22% 30%, #d12626 0%, #b91c1c 45%, #8f1414 100%);
+        font-family: -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        color: #fff;
+      }
+      .badge {
+        flex: 0 0 auto;
+        width: 132px;
+        height: 132px;
+        border-radius: 30px;
+        background: rgba(255, 255, 255, 0.10);
+        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .text { display: flex; flex-direction: column; }
+      .title { font-size: 44px; font-weight: 800; letter-spacing: -0.5px; line-height: 1.05; }
+      .title small { display: block; font-size: 22px; font-weight: 600; opacity: 0.92; margin-top: 4px; }
+      .tag {
+        margin-top: 16px;
+        font-size: 17px;
+        font-weight: 500;
+        color: #ffd54f;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="tile">
+      <div class="badge">
+        <!-- crescent moon + star, matching the extension icon -->
+        <svg width="96" height="96" viewBox="0 0 100 100" aria-hidden="true">
+          <defs>
+            <mask id="crescent">
+              <rect width="100" height="100" fill="#000" />
+              <circle cx="46" cy="52" r="36" fill="#fff" />
+              <circle cx="63" cy="41" r="32" fill="#000" />
+            </mask>
+          </defs>
+          <rect width="100" height="100" fill="#ffd54f" mask="url(#crescent)" />
+          <circle cx="76" cy="31" r="6" fill="#ffd54f" />
+        </svg>
+      </div>
+      <div class="text">
+        <div class="title">Lịch Việt<small>Viet Calendar</small></div>
+        <div class="tag">Âm lịch → Google Calendar</div>
+      </div>
+    </div>
+  </body>
+</html>
