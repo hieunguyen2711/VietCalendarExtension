@@ -15,17 +15,21 @@ import {
 import { convertSolar2Lunar, getLeapMonthOfYear } from '../core/lunar.js';
 import { zodiacForLunarYear } from '../core/zodiac.js';
 import { NONE, lunarYearly, lunarMonthly } from '../core/recurrence.js';
-import { buildDraft, localTimeZone, describeReminder } from '../core/draft.js';
+import { buildDraft, localTimeZone } from '../core/draft.js';
 import { HOLIDAYS, holidayName } from '../core/holidays.js';
 import { EVENT_COLORS, colorName } from '../core/colors.js';
 import { parseBulk, partitionRows } from '../core/bulk.js';
 import { t, setLang, getLang, applyTranslations } from '../core/i18n.js';
 import {
   insertEvent,
+  updateEvent,
   deleteEvent,
   listCalendars,
   findOrCreateLunarCalendar,
+  getAccountEmail,
 } from '../calendar/calendarService.js';
+import { isSignedIn, getAuthToken, signOut } from '../auth/googleAuth.js';
+import { resolveLunarClamped } from '../core/occurrences.js';
 import {
   getPrefs,
   setPrefs,
@@ -41,6 +45,10 @@ let prefs = null;
 /** Drafts awaiting confirmation (one for a single event, many for bulk). */
 let pending = [];
 let submitting = false;
+/** Set when the form was loaded from History; saving PATCHes that event. */
+let editing = null;
+/** Which tab the confirm screen was entered from, so Back can return there. */
+let confirmOrigin = 'new';
 
 // ---------------------------------------------------------------- views
 
@@ -284,7 +292,11 @@ function handlePreview(e) {
     if (errors.length) return void (errorEl.textContent = errors.join('\n'));
   } else {
     const titleRes = validateTitle($('title').value);
-    if (!titleRes.ok) errors.push(t('errRequired'));
+    // Distinguish "empty" from "too long" — collapsing both into "required"
+    // told users with a very long title that the field was blank.
+    if (!titleRes.ok) {
+      errors.push($('title').value.trim() ? t('errTitleLong') : t('errRequired'));
+    }
     const dateRes = resolveDate();
     if (!dateRes.ok) errors.push(...dateRes.errors);
     if (errors.length) return void (errorEl.textContent = errors.join('\n'));
@@ -299,6 +311,7 @@ function handlePreview(e) {
     );
   }
 
+  confirmOrigin = 'new';
   renderConfirmation();
   show('confirm');
 }
@@ -361,21 +374,27 @@ async function handleCreate() {
   btn.disabled = true;
   btn.textContent = t('creating');
 
+  let done = 0;
+  let last = null;
   try {
-    let last = null;
-    for (const draft of pending) {
-      const requestId = draft.requestId || (draft.requestId = makeRequestId(draft.googleEvent));
-      const result = await insertEvent(draft.googleEvent, prefs.calendarId, requestId);
-      last = result;
-      await addHistory({
-        eventId: result.id,
-        calendarId: prefs.calendarId,
-        title: draft.preview.title,
-        htmlLink: result.htmlLink || '',
-        createdAt: new Date().toISOString(),
-        source: draft.source,
-        gregorianText: draft.preview.gregorianText,
-      });
+    // Editing replaces the original in place rather than inserting a copy.
+    if (editing) {
+      last = await updateEvent(editing.calendarId, editing.eventId, pending[0].googleEvent);
+      await removeHistory(editing.eventId);
+      await recordCreated(last, pending[0], editing.calendarId);
+      done = 1;
+    } else {
+      for (const draft of pending) {
+        const requestId = draft.requestId || (draft.requestId = makeRequestId(draft.googleEvent));
+        // Drafts already written in an earlier attempt are skipped, so a retry
+        // after a mid-batch failure can't double-record them in History.
+        if (draft.created) { done++; last = draft.created; continue; }
+        const result = await insertEvent(draft.googleEvent, prefs.calendarId, requestId);
+        draft.created = result;
+        last = result;
+        await recordCreated(result, draft, prefs.calendarId);
+        done++;
+      }
     }
 
     const link = $('open-link');
@@ -385,8 +404,12 @@ async function handleCreate() {
     } else {
       link.classList.add('hidden');
     }
-    $('success-body').textContent =
-      pending.length > 1 ? `${pending.length} ${t('holidaysAdded')}` : t('successBody');
+    $('success-body').textContent = editing
+      ? t('eventUpdated')
+      : done > 1
+        ? `${done} ${t('holidaysAdded')}`
+        : t('successBody');
+    editing = null;
     show('success');
   } catch (err) {
     // The chosen calendar was deleted in Google Calendar since we saved it.
@@ -397,22 +420,45 @@ async function handleCreate() {
       renderConfirmation();
       errorEl.textContent = t('calendarMissingRetry');
     } else {
-      errorEl.textContent = err.message || 'Something went wrong. Please try again.';
+      const base = err.rateLimited ? t('errRateLimited') : (err.message || 'Something went wrong.');
+      // Never hide partial progress: say how many already exist, so the user
+      // isn't left thinking nothing happened (and duplicating them by hand).
+      errorEl.textContent = done > 0
+        ? `${base}\n(${done}/${pending.length} ${t('partialSuccess')})`
+        : base;
     }
   } finally {
     submitting = false;
     btn.disabled = false;
-    btn.textContent = t('create');
+    btn.textContent = editing ? t('saveChanges') : t('create');
   }
+}
+
+/** Write one created/updated event into the local history log. */
+async function recordCreated(result, draft, calendarId) {
+  await addHistory({
+    eventId: result.id,
+    calendarId,
+    title: draft.preview.title,
+    htmlLink: result.htmlLink || '',
+    createdAt: new Date().toISOString(),
+    source: draft.source,
+    gregorianText: draft.preview.gregorianText,
+  });
 }
 
 /** Deterministic id from event content, so a double-click can't duplicate it. */
 function makeRequestId(googleEvent) {
+  // Every field the user can change must be in the seed. Leaving colour or
+  // reminders out means a changed event hashes to the same id, Google 409s,
+  // and the change is silently discarded.
   const seed = JSON.stringify([
     googleEvent.summary,
     googleEvent.start,
     googleEvent.end,
     googleEvent.recurrence || null,
+    googleEvent.colorId || null,
+    googleEvent.reminders || null,
   ]);
   let h = 0;
   for (let i = 0; i < seed.length; i++) h = (Math.imul(31, h) + seed.charCodeAt(i)) | 0;
@@ -421,6 +467,8 @@ function makeRequestId(googleEvent) {
 
 function resetForm() {
   pending = [];
+  clearEditing();
+  confirmOrigin = 'new';
   $('event-form').reset();
   $('converted-hint').textContent = '';
   $('bulk-status').textContent = '';
@@ -448,10 +496,13 @@ function renderHolidays() {
     const span = document.createElement('span');
     let text = `${holidayName(h, getLang())} — ${h.day}/${h.month} ${t('lunarLabel')}`;
     if (Number.isInteger(year)) {
-      const res = validateLunarDate({ day: h.day, month: h.month, year, isLeapMonth: false });
-      if (res.ok) {
-        const g = res.value.gregorian;
+      const res = resolveLunarClamped({ day: h.day, month: h.month, year, isLeapMonth: false });
+      if (res) {
+        const g = res.gregorian;
         text += ` → ${g.day}/${g.month}/${g.year}`;
+        // Tất Niên is "the last day of month 12", which is day 29 about half
+        // the time. Show that we adjusted rather than pretending otherwise.
+        if (res.clamped) text += ` (${res.lunar.day}/${res.lunar.month} — ${t('holidayClamped')})`;
       }
     }
     span.textContent = text;
@@ -467,7 +518,7 @@ function handleAddHolidays() {
   errorEl.textContent = '';
   const year = parseInt($('holiday-year').value, 10);
   if (!Number.isInteger(year)) {
-    errorEl.textContent = t('errNoneSelected');
+    errorEl.textContent = t('errYearRequired');
     return;
   }
   const chosen = [...$('holiday-list').querySelectorAll('input:checked')].map((c) => c.value);
@@ -479,13 +530,16 @@ function handleAddHolidays() {
   pending = [];
   for (const id of chosen) {
     const h = HOLIDAYS.find((x) => x.id === id);
-    const res = validateLunarDate({ day: h.day, month: h.month, year, isLeapMonth: false });
-    if (!res.ok) continue;
+    // Clamping resolver, not the strict validator: a holiday is a fixed
+    // observance, so day 30 of a 29-day month must resolve to day 29 rather
+    // than be dropped without a word.
+    const res = resolveLunarClamped({ day: h.day, month: h.month, year, isLeapMonth: false });
+    if (!res) continue;
     pending.push(
       buildDraft({
         title: holidayName(h, getLang()),
-        gregorian: res.value.gregorian,
-        lunar: res.value.lunar,
+        gregorian: res.gregorian,
+        lunar: res.lunar,
         allDay: true,
         recurrence: lunarYearly(),
         reminderMinutes: prefs.defaultReminderMinutes,
@@ -496,9 +550,10 @@ function handleAddHolidays() {
     );
   }
   if (!pending.length) {
-    errorEl.textContent = t('errNoneSelected');
+    errorEl.textContent = t('errNoneResolved');
     return;
   }
+  confirmOrigin = 'holidays';
   renderConfirmation();
   show('confirm');
 }
@@ -569,6 +624,11 @@ async function handleDelete(entry, btn) {
 function loadIntoForm(entry) {
   const src = entry.source;
   if (!src?.lunar) return;
+  // Remember which event this is, so saving PATCHes it instead of inserting a
+  // near-duplicate alongside the original.
+  editing = { eventId: entry.eventId, calendarId: entry.calendarId };
+  $('edit-banner').classList.remove('hidden');
+  $('preview-btn').textContent = t('saveChanges');
   $('mode').value = 'lunar';
   $('title').value = entry.title;
   $('in-day').value = src.lunar.day;
@@ -632,6 +692,51 @@ async function loadCalendars() {
   }
 }
 
+/**
+ * Reflect sign-in state in the UI. When signed out we show a sign-in button
+ * up front rather than waiting for the first API call — Chrome tears the popup
+ * down when the consent window takes focus, so prompting at submit time throws
+ * away whatever the user had typed.
+ */
+async function refreshAuthState() {
+  const signedIn = await isSignedIn();
+  $('auth-banner').classList.toggle('hidden', signedIn);
+  if (signedIn) {
+    const email = await getAccountEmail();
+    $('account-email').textContent = email || '—';
+  } else {
+    $('account-email').textContent = '—';
+  }
+  return signedIn;
+}
+
+async function handleSignIn() {
+  const btn = $('sign-in-btn');
+  btn.disabled = true;
+  try {
+    await getAuthToken(true);
+    await refreshAuthState();
+  } catch {
+    // User dismissed the consent window; the banner simply stays visible.
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function handleSignOut() {
+  await signOut();
+  await resetCalendarToPrimary();
+  await refreshAuthState();
+  $('settings-status').textContent = t('signedOut');
+}
+
+/** Leave edit mode and return the form to normal "create" behaviour. */
+function clearEditing() {
+  editing = null;
+  $('edit-banner').classList.add('hidden');
+  $('preview-btn').textContent = t('preview');
+}
+
 /** Point the extension back at the primary calendar and persist that. */
 async function resetCalendarToPrimary() {
   prefs = { ...prefs, calendarId: 'primary', calendarName: '' };
@@ -668,6 +773,8 @@ async function handleCreateCalendar() {
 
 async function applyLanguage(lang) {
   setLang(lang);
+  // applyTranslations rewrites every [data-i18n] element, wiping any dynamic
+  // text written over one. Everything so affected is re-rendered below.
   applyTranslations(document);
   $('lang-select').value = lang;
   $('lang-quick').value = lang;
@@ -676,6 +783,14 @@ async function applyLanguage(lang) {
   toggleTimeRow();
   renderHolidays();
   await renderHistory();
+  if (editing) $('preview-btn').textContent = t('saveChanges');
+
+  // The confirmation is built from buildDraft({lang}), so its values (not just
+  // its labels) have to be regenerated or the screen ends up half-translated.
+  if (pending.length && !$('confirm-view').classList.contains('hidden')) {
+    pending = pending.map((d) => buildDraft({ ...d.source, title: d.preview.title, lang }));
+    renderConfirmation();
+  }
 }
 
 function applyDefaultsToForm() {
@@ -695,6 +810,8 @@ function applyDefaultsToForm() {
 $('tabs').addEventListener('click', (e) => {
   const tab = e.target.closest('.tab');
   if (!tab) return;
+  // Navigating away mid-write would strand the batch and desync the counters.
+  if (submitting) return;
   const view = tab.dataset.view;
   if (view === 'history') renderHistory();
   if (view === 'holidays') renderHolidays();
@@ -703,7 +820,18 @@ $('tabs').addEventListener('click', (e) => {
 });
 
 $('event-form').addEventListener('submit', handlePreview);
-$('back-btn').addEventListener('click', () => show('new'));
+$('sign-in-btn').addEventListener('click', handleSignIn);
+$('sign-out-btn').addEventListener('click', handleSignOut);
+$('cancel-edit-btn').addEventListener('click', () => {
+  clearEditing();
+  resetForm();
+});
+// Return to whichever tab the confirmation was reached from, so a holiday
+// selection isn't silently thrown away.
+$('back-btn').addEventListener('click', () => {
+  if (confirmOrigin === 'holidays') show('holidays');
+  else show('new');
+});
 $('create-btn').addEventListener('click', handleCreate);
 $('another-btn').addEventListener('click', resetForm);
 $('all-day').addEventListener('change', toggleTimeRow);
@@ -723,6 +851,8 @@ $('select-all-btn').addEventListener('click', () => {
 $('add-holidays-btn').addEventListener('click', handleAddHolidays);
 
 $('clear-history-btn').addEventListener('click', async () => {
+  // Destructive and un-undoable, so confirm first.
+  if (!confirm(t('confirmClearHistory'))) return;
   await clearHistory();
   await renderHistory();
 });
@@ -739,7 +869,9 @@ $('default-reminder').addEventListener('change', async (e) => {
   const v = e.target.value === '' ? null : Number(e.target.value);
   prefs = { ...prefs, defaultReminderMinutes: v };
   await setPrefs({ defaultReminderMinutes: v });
-  $('reminder').value = e.target.value;
+  // Deliberately does NOT touch the New form: this sets the default for FUTURE
+  // events, and overwriting a half-composed event would discard the user's
+  // explicit choice. The default applies on the next reset.
   $('settings-status').textContent = t('settingsSaved');
 });
 
@@ -765,9 +897,11 @@ for (const id of ['lang-select', 'lang-quick']) {
   renderColorPicker('default-color-picker', 'default-color', prefs.defaultColorId, async (id) => {
     prefs = { ...prefs, defaultColorId: id };
     await setPrefs({ defaultColorId: id });
-    renderColorPicker('color-picker', 'event-color', id);
+    // As with the reminder default: applies to future events, not the one
+    // currently being composed.
     $('settings-status').textContent = t('settingsSaved');
   });
+  await refreshAuthState();
   renderToday();
   updateModeUI();
   toggleTimeRow();

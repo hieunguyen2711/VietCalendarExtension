@@ -18,6 +18,11 @@
         <p id="today-line" class="today"></p>
       </header>
 
+      <div id="auth-banner" class="auth-banner hidden">
+        <p class="hint" data-i18n="signInPrompt">Sign in with Google to create events.</p>
+        <button id="sign-in-btn" type="button" class="primary" data-i18n="signIn">Sign in with Google</button>
+      </div>
+
       <nav class="tabs" id="tabs">
         <button class="tab active" data-view="new" data-i18n="navNew">New</button>
         <button class="tab" data-view="holidays" data-i18n="navHolidays">Holidays</button>
@@ -27,6 +32,11 @@
 
       <!-- ============ NEW EVENT ============ -->
       <section id="new-view" class="view">
+        <div id="edit-banner" class="edit-banner hidden">
+          <span data-i18n="editingNotice">Editing an existing event — saving updates it in place.</span>
+          <button id="cancel-edit-btn" type="button" class="secondary small" data-i18n="cancelEdit">Cancel</button>
+        </div>
+
         <form id="event-form" novalidate>
           <label class="field">
             <span data-i18n="modeLabel">Enter date as</span>
@@ -192,6 +202,14 @@
 
       <!-- ============ SETTINGS ============ -->
       <section id="settings-view" class="view hidden">
+        <div class="field account-row">
+          <div>
+            <span data-i18n="signedInAs">Signed in as</span>
+            <strong id="account-email">—</strong>
+          </div>
+          <button id="sign-out-btn" type="button" class="secondary small" data-i18n="signOut">Sign out</button>
+        </div>
+
         <label class="field">
           <span data-i18n="language">Language</span>
           <select id="lang-select">

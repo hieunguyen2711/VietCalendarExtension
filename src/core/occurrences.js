@@ -51,6 +51,41 @@ function resolveDay(day, month, lunarYear, leap, timeZone) {
 }
 
 /**
+ * Whether a lunar input's leap flag applies in its own year. A leap month only
+ * exists in the years that actually have it.
+ */
+function startLeapFlag(lunar, timeZone) {
+  return lunar.isLeapMonth && getLeapMonthOfYear(lunar.year, timeZone) === lunar.month ? 1 : 0;
+}
+
+/**
+ * Resolve a lunar date to a Gregorian date, CLAMPING the day down when that
+ * lunar month is too short (day 30 of a 29-day month becomes day 29).
+ *
+ * This is the lenient counterpart to validateLunarDate, which rejects such a
+ * date. Use it where a lunar date is a fixed observance rather than something
+ * the user typed — Tất Niên is defined as "the last day of month 12", which is
+ * day 29 in roughly half of all years. Rejecting it there would silently drop
+ * the holiday.
+ *
+ * @returns {{gregorian, lunar, clamped}|null} `lunar` is the date actually
+ *          resolved (post-clamp), and `clamped` says whether it moved.
+ */
+export function resolveLunarClamped(lunar, timeZone = VN_TIMEZONE) {
+  const leap = startLeapFlag(lunar, timeZone);
+  const gregorian = resolveDay(lunar.day, lunar.month, lunar.year, leap, timeZone);
+  if (!gregorian) return null;
+  const [ld, lm, ly, ll] = convertSolar2Lunar(
+    gregorian.day, gregorian.month, gregorian.year, timeZone
+  );
+  return {
+    gregorian,
+    lunar: { day: ld, month: lm, year: ly, isLeapMonth: !!ll },
+    clamped: ld !== lunar.day,
+  };
+}
+
+/**
  * Gregorian dates for a lunar date repeated over `years` consecutive lunar
  * years, starting at `lunar.year`. The first entry is the original date.
  * @param {{day:number, month:number, year:number, isLeapMonth:boolean}} lunar
@@ -61,7 +96,7 @@ export function lunarAnniversaryDates(lunar, years = DEFAULT_YEARS, timeZone = V
   for (let i = 0; i < years; i++) {
     const y = lunar.year + i;
     // Only use the leap variant in years that actually have that leap month.
-    const leap = lunar.isLeapMonth && getLeapMonthOfYear(y, timeZone) === lunar.month ? 1 : 0;
+    const leap = startLeapFlag({ ...lunar, year: y }, timeZone);
     const g = resolveDay(lunar.day, lunar.month, y, leap, timeZone);
     if (g) out.push(g);
   }
@@ -81,8 +116,13 @@ export function lunarAnniversaryDates(lunar, years = DEFAULT_YEARS, timeZone = V
  */
 export function lunarMonthlyDates(lunar, years = MONTHLY_YEARS, timeZone = VN_TIMEZONE) {
   const out = [];
-  // Anything earlier than the requested starting month is dropped.
-  const startG = resolveDay(lunar.day, lunar.month, lunar.year, 0, timeZone);
+  // Anything earlier than the requested starting month is dropped. The start
+  // must be resolved with the SAME leap flag as the input: computing it from
+  // the ordinary month when the user picked a leap month puts the cutoff ~29
+  // days too early, so the ordinary month's date leaks in as occurrences[0]
+  // and no longer matches the event's own start date.
+  const startLeap = startLeapFlag(lunar, timeZone);
+  const startG = resolveDay(lunar.day, lunar.month, lunar.year, startLeap, timeZone);
   const startJd = startG ? jdFromDate(startG.day, startG.month, startG.year) : -Infinity;
 
   for (let i = 0; i < years; i++) {
