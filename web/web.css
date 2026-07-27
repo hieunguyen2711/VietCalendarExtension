@@ -1,0 +1,52 @@
+/*
+ * Phone overrides for the popup stylesheet.
+ *
+ * popup.css is written for a Chrome action popup: a fixed 360px box that
+ * scrolls internally. On a phone that box is both too narrow to use the screen
+ * and too tall to fit one, so the geometry is relaxed here and everything else
+ * — colours, dark mode, component styling — is inherited untouched.
+ */
+
+body {
+  width: 100%;
+  max-height: none;
+  overflow-y: visible;
+  /* Keeps the app readable on a tablet or desktop browser without stretching
+     a form designed for one column across the whole viewport. */
+  max-width: 480px;
+  margin: 0 auto;
+  /* Respect the iOS home indicator and notch. */
+  padding: env(safe-area-inset-top) env(safe-area-inset-right)
+    env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+/* Comfortable touch targets. Apple and Google both put the floor around 44px;
+   the popup's mouse-sized controls are well under that. Checkboxes and radios
+   are excluded — the colour swatches hide a radio and style a sibling. */
+button,
+.button,
+select,
+textarea,
+input:not([type='checkbox']):not([type='radio']) {
+  min-height: 44px;
+}
+
+.tab {
+  min-height: 44px;
+}
+
+/* Only the picker's swatches grow; .inline-dot lives in running text at 12px
+   and must stay there. */
+.color-picker .dot {
+  width: 30px;
+  height: 30px;
+}
+
+/* iOS Safari zooms the page when a focused field's text is under 16px. */
+@media (max-width: 480px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}

@@ -13,8 +13,15 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const OUT_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'icons');
+const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
+const OUT_DIR = path.join(ROOT, 'icons');
 const SIZES = [16, 32, 48, 128];
+
+// The PWA needs 192 and 512 to be installable. They go to web/icons/ rather
+// than icons/, which pack.mjs ships wholesale — the extension would carry
+// ~40 KB of images it never renders.
+const WEB_OUT_DIR = path.join(ROOT, 'web', 'icons');
+const WEB_SIZES = [192, 512];
 const SS = 4; // supersampling factor per axis, for anti-aliasing
 
 const RED = [0xb9, 0x1c, 0x1c];
@@ -122,9 +129,14 @@ function encodePNG(rgba, size) {
 
 // --- Run ---------------------------------------------------------------------
 
-fs.mkdirSync(OUT_DIR, { recursive: true });
-for (const size of SIZES) {
-  const file = path.join(OUT_DIR, `icon${size}.png`);
-  fs.writeFileSync(file, encodePNG(renderRGBA(size), size));
-  console.log(`wrote ${path.relative(process.cwd(), file)} (${size}x${size})`);
+for (const [dir, sizes] of [
+  [OUT_DIR, SIZES],
+  [WEB_OUT_DIR, WEB_SIZES],
+]) {
+  fs.mkdirSync(dir, { recursive: true });
+  for (const size of sizes) {
+    const file = path.join(dir, `icon${size}.png`);
+    fs.writeFileSync(file, encodePNG(renderRGBA(size), size));
+    console.log(`wrote ${path.relative(process.cwd(), file)} (${size}x${size})`);
+  }
 }

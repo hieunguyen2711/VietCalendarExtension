@@ -30,6 +30,7 @@ import {
 } from '../calendar/calendarService.js';
 import {
   isSignedIn,
+  signIn,
   signOut,
   clearSignInResult,
   readSignInResult,
@@ -739,9 +740,10 @@ async function handleSignIn() {
   btn.disabled = true;
   showAuthError(null);
   try {
-    // Delegated to the service worker: the consent window destroys this popup,
-    // and a caller that no longer exists can't learn why sign-in failed.
-    const res = await chrome.runtime.sendMessage({ type: 'signIn' });
+    // Platform-specific: the extension hands this to its service worker
+    // (the consent window destroys this popup, and a caller that no longer
+    // exists can't learn why sign-in failed); the web build prompts inline.
+    const res = await signIn();
     if (res?.ok) await refreshAuthState();
     else if (res) showAuthError(authErrorKey(res.error), res.error);
   } catch {

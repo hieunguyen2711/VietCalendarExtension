@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Viet Calendar</title>
+
+    <!--
+      The Web application OAuth client for this deployment. It is NOT the
+      client id in manifest.json — that one is type "Chrome Extension" and is
+      bound to the extension id, so it cannot authorize a web origin. Create a
+      second client of type "Web application" whose Authorized JavaScript
+      origins list the site serving this page. Public by design: browser OAuth
+      clients have no secret.
+    -->
+    <meta name="google-oauth-client-id" content="REPLACE_WITH_WEB_CLIENT_ID" />
+
+    <meta name="theme-color" content="#b91c1c" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="icons/icon192.png" />
+
+    <!-- The popup's stylesheet is the source of truth; web.css only relaxes
+         the fixed popup geometry for a phone screen. -->
+    <link rel="stylesheet" href="../src/popup/popup.css" />
+    <link rel="stylesheet" href="web.css" />
+
+    <script src="https://accounts.google.com/gsi/client" async></script>
+  </head>
+  <body>
+    <main class="app" id="boot-status">
+      <p class="hint">Loading…</p>
+    </main>
+    <script type="module" src="boot.js"></script>
+  </body>
+</html>

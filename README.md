@@ -35,10 +35,19 @@ Lunar date  ──▶  validate  ──▶  convert to Gregorian  ──▶  pre
 | `src/core/occurrences.js` | Expands a lunar date into per-year Gregorian dates |
 | `src/core/validate.js` | Input validation (impossible/ambiguous dates) |
 | `src/core/draft.js` | Builds the preview + the exact Google event payload |
-| `src/auth/googleAuth.js` | OAuth via `chrome.identity.getAuthToken` |
+| `src/auth/googleAuth.js` | Auth facade — picks the platform's identity provider |
+| `src/auth/chromeIdentity.js` | OAuth via `chrome.identity.getAuthToken` (extension) |
+| `src/auth/webIdentity.js` | OAuth via Google Identity Services (hosted web build) |
+| `src/auth/scopes.js` | The scope list, mirrored in `manifest.json` |
+| `src/background.js` | Service worker; owns interactive sign-in (extension only) |
 | `src/calendar/calendarService.js` | `events.insert` with 401 retry + idempotency |
-| `src/popup/` | Popup UI (form → preview → success) |
+| `src/popup/` | The UI (form → preview → success), shared by both surfaces |
+| `web/` | Hosted mobile build — borrows the popup's markup and controller |
 | `test/` | Node's built-in test runner (`npm test`) |
+
+`src/core/` is pure: no `chrome.*`, no DOM. The platform difference lives
+entirely in `src/auth/googleAuth.js` and `src/storage/prefs.js`, which is what
+lets the same popup UI run as an extension and as a web page.
 
 ## Running the tests
 
@@ -58,6 +67,11 @@ You must do this once — it can't be scripted.
    - Go to `chrome://extensions`, enable **Developer mode**.
    - Click **Load unpacked** and select this project folder.
    - Copy the extension's **ID** (a long string under its name).
+
+   > The `"key"` field in `manifest.json` pins this ID. Without it, an unpacked
+   > build takes an ID hashed from its folder path, which won't match the Web
+   > Store build — and the OAuth client can only be registered against one ID,
+   > so the other fails with `bad client id`. Keep `key` in place.
 2. In the [Google Cloud Console](https://console.cloud.google.com/):
    - Create (or pick) a project.
    - **APIs & Services → Library →** enable **Google Calendar API**.
@@ -75,6 +89,57 @@ You must do this once — it can't be scripted.
    }
    ```
 4. Back on `chrome://extensions`, click **Reload** on the extension.
+
+## Mobile web version
+
+Chrome extensions don't exist on Chrome for Android or iOS, so anyone without a
+desktop browser can't use the extension at all. `web/` is the same app served
+as a web page for them.
+
+It isn't a fork. `web/index.html` fetches `src/popup/popup.html`, injects its
+body, and imports `src/popup/popup.js` — one copy of the markup, the CSS, the
+controller, and all of `src/core/`. `web/web.css` only relaxes the popup's
+fixed 360px geometry for a phone, and the platform split is handled underneath
+by `googleAuth.js` (Google Identity Services instead of `chrome.identity`) and
+`prefs.js` (`localStorage` instead of `chrome.storage`). There is no build step
+and nothing generated, so the web build can't drift from the extension.
+
+### Setup
+
+1. **A second OAuth client.** The one in `manifest.json` is type *Chrome
+   Extension* and is bound to the extension ID; it cannot authorize a web
+   origin. In the same Cloud project create another client of type **Web
+   application**, and list the site under **Authorized JavaScript origins**
+   (e.g. `https://<user>.github.io`, plus `http://localhost:8000` for local
+   testing). Leave redirect URIs empty — the GIS token client uses
+   `postMessage`.
+2. **Put its ID in the page.** In `web/index.html`, replace
+   `REPLACE_WITH_WEB_CLIENT_ID` in the `google-oauth-client-id` meta tag.
+   Browser OAuth clients have no secret, so this is public by design.
+3. **Publish the OAuth consent screen.** In Testing status only listed test
+   users can sign in and grants lapse every 7 days — unworkable for people on
+   phones. *Google Auth Platform → Audience → Publish app*. Until verified,
+   users see the "Google hasn't verified this app" screen and there's a
+   100-user cap.
+4. **Serve it.** On GitHub Pages: *Settings → Pages → Deploy from branch*,
+   branch `main`, folder **`/ (root)`**. The root must be served, not `/docs`,
+   because `web/` reaches `../src/` directly. `.nojekyll` keeps Pages from
+   filtering paths, and the root `index.html` redirects to `web/`.
+
+Locally: `python3 -m http.server 8000` from the project root, then open
+`http://localhost:8000/web/`.
+
+### Known limits
+
+- **Tokens last about an hour.** Browser-only OAuth issues no refresh token
+  (that needs a server holding a client secret). When it expires the user signs
+  in again. On iOS, Safari's tracking prevention can also block silent renewal.
+- **Preferences and history are per-device.** `localStorage` is per-origin, so
+  unlike the extension's `chrome.storage.sync` they don't follow the user
+  between devices.
+- **The access token is never persisted** — memory only. On GitHub Pages every
+  project shares one origin, so anything in `localStorage` is readable by other
+  pages there.
 
 ## Using it
 
