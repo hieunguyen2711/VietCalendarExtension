@@ -122,6 +122,12 @@ const STRINGS = {
     signedInAs: 'Signed in as',
     signOut: 'Sign out',
     signedOut: 'Signed out.',
+    authErrorBlocked:
+      'Sign-in didn’t finish. If Google showed “Access blocked … has not completed the Google verification process”, this Google account hasn’t been allowed to use the extension yet — ask the extension owner to add it.',
+    authErrorNoChromeAccount:
+      'Chrome isn’t signed in to a Google account. Sign in to Chrome (profile menu, top right), then try again.',
+    authErrorClientId:
+      'Google rejected this extension’s OAuth client. The extension’s ID and its Google Cloud OAuth client don’t match — this needs fixing by the extension owner.',
     editingNotice: 'Editing an existing event — saving updates it in place.',
     cancelEdit: 'Cancel',
     eventUpdated: 'Event updated',
@@ -252,6 +258,12 @@ const STRINGS = {
     signedInAs: 'Đang đăng nhập với',
     signOut: 'Đăng xuất',
     signedOut: 'Đã đăng xuất.',
+    authErrorBlocked:
+      'Đăng nhập chưa hoàn tất. Nếu Google báo “Access blocked … has not completed the Google verification process”, nghĩa là tài khoản Google này chưa được phép dùng tiện ích — hãy nhờ chủ tiện ích thêm tài khoản vào.',
+    authErrorNoChromeAccount:
+      'Chrome chưa đăng nhập tài khoản Google. Hãy đăng nhập vào Chrome (menu hồ sơ, góc trên bên phải) rồi thử lại.',
+    authErrorClientId:
+      'Google từ chối OAuth client của tiện ích. ID của tiện ích và OAuth client trên Google Cloud không khớp — chủ tiện ích cần sửa lại.',
     editingNotice: 'Đang sửa một sự kiện đã có — lưu sẽ cập nhật trực tiếp.',
     cancelEdit: 'Hủy',
     eventUpdated: 'Đã cập nhật sự kiện',

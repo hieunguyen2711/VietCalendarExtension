@@ -122,6 +122,10 @@ button, .button {
   background: color-mix(in srgb, var(--primary) 8%, transparent);
 }
 .auth-banner .hint { margin: 0 0 8px; }
+.auth-banner .error { min-height: 0; }
+.auth-banner .error[hidden] { display: none; }
+.auth-error-raw { font-family: ui-monospace, monospace; font-size: 11px; word-break: break-word; }
+.auth-error-raw[hidden] { display: none; }
 
 .edit-banner {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;

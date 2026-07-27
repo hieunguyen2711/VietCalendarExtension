@@ -28,7 +28,13 @@ import {
   findOrCreateLunarCalendar,
   getAccountEmail,
 } from '../calendar/calendarService.js';
-import { isSignedIn, getAuthToken, signOut } from '../auth/googleAuth.js';
+import {
+  isSignedIn,
+  signOut,
+  clearSignInResult,
+  readSignInResult,
+  authErrorKey,
+} from '../auth/googleAuth.js';
 import { resolveLunarClamped } from '../core/occurrences.js';
 import {
   getPrefs,
@@ -702,6 +708,7 @@ async function refreshAuthState() {
   const signedIn = await isSignedIn();
   $('auth-banner').classList.toggle('hidden', signedIn);
   if (signedIn) {
+    showAuthError(null);
     const email = await getAccountEmail();
     $('account-email').textContent = email || '—';
   } else {
@@ -710,16 +717,55 @@ async function refreshAuthState() {
   return signedIn;
 }
 
+/**
+ * Show or clear the explanation under the sign-in button. The key is parked in
+ * data-i18n so a later language switch re-translates the advice; Chrome's own
+ * message is appended verbatim, untranslated, because it's the part that
+ * actually identifies the failure when someone reports a problem.
+ */
+function showAuthError(key, detail) {
+  const el = $('auth-error');
+  const raw = $('auth-error-raw');
+  if (key) el.dataset.i18n = key;
+  else delete el.dataset.i18n;
+  el.textContent = key ? t(key) : '';
+  el.hidden = !key;
+  raw.textContent = detail ? `Chrome: ${detail}` : '';
+  raw.hidden = !detail;
+}
+
 async function handleSignIn() {
   const btn = $('sign-in-btn');
   btn.disabled = true;
+  showAuthError(null);
   try {
-    await getAuthToken(true);
-    await refreshAuthState();
+    // Delegated to the service worker: the consent window destroys this popup,
+    // and a caller that no longer exists can't learn why sign-in failed.
+    const res = await chrome.runtime.sendMessage({ type: 'signIn' });
+    if (res?.ok) await refreshAuthState();
+    else if (res) showAuthError(authErrorKey(res.error), res.error);
   } catch {
-    // User dismissed the consent window; the banner simply stays visible.
+    // Popup torn down mid-flight, or the worker went away. Either way the
+    // worker recorded the outcome; the next popup will report it.
   } finally {
     btn.disabled = false;
+  }
+}
+
+/**
+ * Report the outcome of a sign-in this popup didn't live to see. Anything the
+ * worker recorded is authoritative; a still-pending flag means the consent
+ * window is probably still open, which is not a failure worth shouting about.
+ */
+async function reportPriorSignIn(signedIn) {
+  const { pending, error } = await readSignInResult();
+  if (signedIn || (!error && !pending)) {
+    await clearSignInResult();
+    return;
+  }
+  if (error) {
+    await clearSignInResult();
+    showAuthError(authErrorKey(error), error);
   }
 }
 
@@ -901,7 +947,8 @@ for (const id of ['lang-select', 'lang-quick']) {
     // currently being composed.
     $('settings-status').textContent = t('settingsSaved');
   });
-  await refreshAuthState();
+  const signedIn = await refreshAuthState();
+  await reportPriorSignIn(signedIn);
   renderToday();
   updateModeUI();
   toggleTimeRow();
