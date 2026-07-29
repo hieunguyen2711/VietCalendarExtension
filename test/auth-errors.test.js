@@ -19,6 +19,13 @@ test('Chrome phrasing of a client-id mismatch is classified as such', () => {
   assert.equal(authErrorKey('Invalid client id.'), 'authErrorClientId');
 });
 
+// The web equivalent: the page's origin isn't on the OAuth client's allow-list.
+// Same root cause as a wrong extension ID, so it must land on the same advice.
+test('GIS phrasing of an unregistered origin is classified as a client problem', () => {
+  assert.equal(authErrorKey('invalid_client'), 'authErrorClientId');
+  assert.equal(authErrorKey('no registered origin'), 'authErrorClientId');
+});
+
 test('a signed-out Chrome profile is called out separately', () => {
   assert.equal(authErrorKey('The user is not signed in.'), 'authErrorNoChromeAccount');
 });

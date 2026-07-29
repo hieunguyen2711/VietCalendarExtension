@@ -127,7 +127,7 @@ const STRINGS = {
     authErrorNoChromeAccount:
       'Chrome isn’t signed in to a Google account. Sign in to Chrome (profile menu, top right), then try again.',
     authErrorClientId:
-      'Google rejected this extension’s OAuth client. The extension’s ID and its Google Cloud OAuth client don’t match — this needs fixing by the extension owner.',
+      'Google rejected this app’s OAuth client: the registered extension ID or website address doesn’t match. This needs fixing by the app owner, not by you.',
     editingNotice: 'Editing an existing event — saving updates it in place.',
     cancelEdit: 'Cancel',
     eventUpdated: 'Event updated',
@@ -263,7 +263,7 @@ const STRINGS = {
     authErrorNoChromeAccount:
       'Chrome chưa đăng nhập tài khoản Google. Hãy đăng nhập vào Chrome (menu hồ sơ, góc trên bên phải) rồi thử lại.',
     authErrorClientId:
-      'Google từ chối OAuth client của tiện ích. ID của tiện ích và OAuth client trên Google Cloud không khớp — chủ tiện ích cần sửa lại.',
+      'Google từ chối OAuth client của ứng dụng: ID tiện ích hoặc địa chỉ trang web đã đăng ký không khớp. Chủ ứng dụng cần sửa lại, không phải lỗi của bạn.',
     editingNotice: 'Đang sửa một sự kiện đã có — lưu sẽ cập nhật trực tiếp.',
     cancelEdit: 'Hủy',
     eventUpdated: 'Đã cập nhật sự kiện',

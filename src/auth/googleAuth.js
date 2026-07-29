@@ -44,12 +44,19 @@ export const readSignInResult = () => impl.readSignInResult();
 export function authErrorKey(message = '') {
   const m = message.toLowerCase();
   if (m.includes('not signed in')) return 'authErrorNoChromeAccount';
-  // Google phrases this as "bad client id", Chrome sometimes as "invalid
-  // client". Both mean the caller's identity doesn't match the ID the OAuth
-  // client was registered against — the extension ID for the extension, the
-  // page's origin for the web build. Either way it's a configuration problem,
-  // not the account's fault, so it must not be reported as a blocked account.
-  if (m.includes('client id') || m.includes('client_id') || m.includes('invalid client')) {
+  // One failure with many spellings: the caller's identity doesn't match what
+  // the OAuth client was registered against. Chrome says "bad client id" when
+  // the extension ID is wrong; GIS says "invalid_client" / "no registered
+  // origin" when the page's origin isn't on the client's allow-list. Both are
+  // configuration, not the account's fault, so neither may be reported as a
+  // blocked account — that sends the owner off adding test users for nothing.
+  if (
+    m.includes('client id') ||
+    m.includes('client_id') ||
+    m.includes('invalid client') ||
+    m.includes('invalid_client') ||
+    m.includes('origin')
+  ) {
     return 'authErrorClientId';
   }
   return 'authErrorBlocked';
