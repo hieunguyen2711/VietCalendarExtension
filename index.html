@@ -25,6 +25,9 @@
         --primary: #b91c1c;
         --primary-fg: #ffffff;
         --card: #f9fafb;
+        --warn-bg: #fffbeb;
+        --warn-border: #f59e0b;
+        --warn-fg: #78350f;
       }
       @media (prefers-color-scheme: dark) {
         :root {
@@ -33,6 +36,9 @@
           --muted: #9aa0a6;
           --border: #3a3f45;
           --card: #2a2f35;
+          --warn-bg: #2e2410;
+          --warn-border: #b4790d;
+          --warn-fg: #fcd34d;
         }
       }
       * { box-sizing: border-box; }
@@ -72,6 +78,24 @@
         margin-top: 1rem;
       }
       a { color: var(--primary); }
+      .notice {
+        background: var(--warn-bg);
+        border: 1px solid var(--warn-border);
+        border-left-width: 4px;
+        border-radius: 8px;
+        padding: 16px 20px;
+        margin-top: 1.25rem;
+      }
+      .notice h3 { margin: 0 0 0.5rem; font-size: 1.05rem; color: var(--warn-fg); }
+      .notice ol { margin: 0.75rem 0 0; padding-left: 1.3rem; }
+      .notice li { margin: 0.35rem 0; }
+      .notice .quote {
+        font-weight: 600;
+        white-space: nowrap;
+      }
+      .notice details { margin-top: 1rem; }
+      .notice summary { cursor: pointer; font-weight: 600; color: var(--warn-fg); }
+      .notice details ol { margin-top: 0.75rem; }
       footer {
         margin-top: 3rem;
         padding-top: 1rem;
@@ -122,6 +146,60 @@
       The web app runs in any browser, including on phones and tablets, where
       Chrome extensions aren’t available. Both versions do the same thing and use
       the same Google account.
+    </div>
+
+    <div class="notice">
+      <h3>⚠️ Google will show a warning when you sign in — this is expected</h3>
+      <p>
+        You’ll see a screen saying <strong>“Google hasn’t verified this app.”</strong>
+        Viet Calendar is a small personal project, and Google only removes that
+        warning for apps hosted on a paid domain it can check ownership of. The
+        app has no server, collects nothing, and cannot see your calendar — see
+        the <a href="PRIVACY.html">privacy policy</a>. You only have to do this
+        once per Google account.
+      </p>
+      <ol>
+        <li>Tap <span class="quote">Sign in with Google</span> and choose your account.</li>
+        <li>On the warning screen, tap <span class="quote">Advanced</span> (bottom left).</li>
+        <li>Tap <span class="quote">Go to … (unsafe)</span> at the bottom.</li>
+        <li>
+          Tick every permission box — or <span class="quote">Select all</span> — then tap
+          <span class="quote">Continue</span>. Skipping a box stops the app from
+          creating your events.
+        </li>
+      </ol>
+      <p>
+        The word “unsafe” is Google’s standard wording for any app it hasn’t
+        reviewed. It is not a sign that something is wrong.
+      </p>
+
+      <details>
+        <summary>Tiếng Việt — Google sẽ hiện cảnh báo, đừng lo</summary>
+        <p>
+          Bạn sẽ thấy màn hình ghi <strong>“Google hasn’t verified this app”</strong>
+          (Google chưa xác minh ứng dụng này). Đây là chuyện bình thường: Viet
+          Calendar là một dự án cá nhân nhỏ, và Google chỉ bỏ cảnh báo đó cho
+          những ứng dụng dùng tên miền trả phí mà Google kiểm tra được chủ sở
+          hữu. Ứng dụng không có máy chủ riêng, không thu thập gì, và không thể
+          xem lịch của bạn — xem
+          <a href="PRIVACY.html">chính sách bảo mật</a>. Bạn chỉ cần làm một lần
+          cho mỗi tài khoản Google.
+        </p>
+        <ol>
+          <li>Nhấn <span class="quote">Sign in with Google</span> và chọn tài khoản của bạn.</li>
+          <li>Ở màn hình cảnh báo, nhấn <span class="quote">Advanced</span> (góc dưới bên trái).</li>
+          <li>Nhấn <span class="quote">Go to … (unsafe)</span> ở phía dưới.</li>
+          <li>
+            Đánh dấu tất cả các ô quyền — hoặc <span class="quote">Select all</span> — rồi nhấn
+            <span class="quote">Continue</span>. Nếu bỏ sót một ô, ứng dụng sẽ
+            không tạo được sự kiện.
+          </li>
+        </ol>
+        <p>
+          Chữ “unsafe” (không an toàn) là cách Google ghi mặc định cho mọi ứng
+          dụng chưa được họ xét duyệt, không có nghĩa là có gì sai.
+        </p>
+      </details>
     </div>
 
     <h2>Your data</h2>
