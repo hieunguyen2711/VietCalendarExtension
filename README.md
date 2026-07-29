@@ -49,6 +49,21 @@ Lunar date  ──▶  validate  ──▶  convert to Gregorian  ──▶  pre
 entirely in `src/auth/googleAuth.js` and `src/storage/prefs.js`, which is what
 lets the same popup UI run as an extension and as a web page.
 
+## Tooling
+
+All dependency-free, run with plain `node`:
+
+```bash
+node tools/pack.mjs            # build the Chrome Web Store upload ZIP
+node tools/generate-icons.mjs  # extension icons + the PWA's 192/512
+node tools/build-privacy.mjs   # PRIVACY.md -> PRIVACY.html
+```
+
+`PRIVACY.md` is the source of truth for the privacy policy; `PRIVACY.html` is
+generated because GitHub Pages serves `.md` as `text/markdown`, which browsers
+may download rather than display — no good for a link in the store listing.
+Edit the Markdown, re-run the script, commit both.
+
 ## Running the tests
 
 ```bash
