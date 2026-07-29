@@ -2,15 +2,143 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Viet Calendar — Vietnamese lunar dates in Google Calendar</title>
+    <meta
+      name="description"
+      content="Viet Calendar creates Google Calendar events from Vietnamese lunar (âm lịch) dates, with optional annual recurrence."
+    />
     <!--
-      GitHub Pages serves this repository from its root so that web/index.html
-      can reach ../src/ without anything being copied or generated. This page
-      only exists to turn the bare Pages URL into a usable link.
+      This is the app's home page, and it is also the URL given to Google on the
+      OAuth consent screen. Google checks that a home page exists, explains what
+      the app does, and carries the same app name as the consent screen — so the
+      <h1> below must stay in sync with the "App name" field in Cloud Console.
     -->
-    <meta http-equiv="refresh" content="0; url=web/" />
-    <title>Viet Calendar</title>
+    <link rel="icon" href="icons/icon32.png" />
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #ffffff;
+        --fg: #1f2328;
+        --muted: #6b7280;
+        --border: #d1d5db;
+        --primary: #b91c1c;
+        --primary-fg: #ffffff;
+        --card: #f9fafb;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #1f2328;
+          --fg: #e6e6e6;
+          --muted: #9aa0a6;
+          --border: #3a3f45;
+          --card: #2a2f35;
+        }
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0 auto;
+        padding: 40px 20px 64px;
+        max-width: 44rem;
+        background: var(--bg);
+        color: var(--fg);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        font-size: 16px;
+        line-height: 1.65;
+      }
+      header { display: flex; align-items: center; gap: 14px; }
+      header img { width: 56px; height: 56px; }
+      h1 { font-size: 1.7rem; margin: 0; line-height: 1.2; }
+      .tagline { color: var(--muted); margin: 4px 0 0; }
+      h2 { font-size: 1.15rem; margin: 2.5rem 0 0.5rem; }
+      ul { padding-left: 1.25rem; }
+      li { margin: 0.4rem 0; }
+      .actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 1.75rem 0 0; }
+      .btn {
+        display: inline-block;
+        padding: 11px 18px;
+        border-radius: 8px;
+        text-decoration: none;
+        font-weight: 600;
+        border: 1px solid var(--primary);
+        color: var(--primary);
+      }
+      .btn.primary { background: var(--primary); color: var(--primary-fg); }
+      .card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 14px 18px;
+        margin-top: 1rem;
+      }
+      a { color: var(--primary); }
+      footer {
+        margin-top: 3rem;
+        padding-top: 1rem;
+        border-top: 1px solid var(--border);
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+      footer a { color: var(--muted); }
+    </style>
   </head>
   <body>
-    <p><a href="web/">Open Viet Calendar</a></p>
+    <header>
+      <img src="icons/icon128.png" alt="" />
+      <div>
+        <h1>Viet Calendar</h1>
+        <p class="tagline">Vietnamese lunar dates, in your Google Calendar.</p>
+      </div>
+    </header>
+
+    <p>
+      Anniversaries in Vietnamese families — giỗ, Tết, Rằm — fall on the lunar
+      calendar (âm lịch), so their Gregorian date moves every year. Viet Calendar
+      converts a lunar date to the right solar date and creates the event in your
+      own Google Calendar, optionally repeating it every lunar year so you never
+      have to look it up again.
+    </p>
+
+    <h2>What it does</h2>
+    <ul>
+      <li>Converts Vietnamese lunar dates to solar dates, including leap months.</li>
+      <li>Creates, edits, and deletes events in your own Google Calendar.</li>
+      <li>Repeats an event annually on the <em>lunar</em> date, not a fixed solar one.</li>
+      <li>Adds Vietnamese public and traditional holidays in bulk.</li>
+      <li>Optionally files everything into a dedicated “Lịch Âm” calendar.</li>
+      <li>Available in English and Vietnamese.</li>
+    </ul>
+
+    <h2>Use it</h2>
+    <div class="actions">
+      <a class="btn primary" href="web/">Open the web app</a>
+      <a
+        class="btn"
+        href="https://chromewebstore.google.com/detail/hahecfioaeelkcihfknefkndaflobpom"
+        >Chrome extension</a
+      >
+    </div>
+    <div class="card">
+      The web app runs in any browser, including on phones and tablets, where
+      Chrome extensions aren’t available. Both versions do the same thing and use
+      the same Google account.
+    </div>
+
+    <h2>Your data</h2>
+    <p>
+      Viet Calendar has no server of its own. It talks only to Google Calendar,
+      using your own Google account, to create the events you ask for. It uses no
+      analytics, no advertising, and no tracking, and the developer cannot see
+      your calendar or your data. Full details are in the
+      <a href="PRIVACY.html">privacy policy</a>.
+    </p>
+
+    <footer>
+      <p>
+        <a href="PRIVACY.html">Privacy policy</a> ·
+        <a href="https://github.com/hieunguyen2711/VietCalendarExtension">Source code</a>
+        · Contact: thehuy134@gmail.com
+      </p>
+    </footer>
   </body>
 </html>
